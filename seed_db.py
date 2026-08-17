@@ -28,8 +28,75 @@ from datetime import date, timedelta
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "notch.db")
 
-# The five tags the product supports. Everything downstream keys off this list.
-TAGS = ["wins", "collaboration", "leadership", "growth", "challenges"]
+# The tag catalog. Names and explanations live in the `tags` table so the
+# tagger can slip them into the prompt at call time — adding a row here is
+# how a new tag becomes available, without editing the prompt.
+#
+# Explanations are the v4 tagging policy (what each tag includes and excludes).
+# The prompt itself only knows how to *apply* a catalog, not what the current
+# names are.
+TAG_CATALOG = [
+    (
+        "wins",
+        "Something concrete LANDED, or a specific defect was CAUGHT before it "
+        "reached users. Shipped, merged, built, fixed, measurably improved. "
+        "Helping someone else succeed is not a win — that is collaboration. "
+        "Unblocking a teammate, debugging alongside them, saving them hours — "
+        "not wins. Two exceptions: catching a real defect in someone's code IS "
+        "a win, and BUILDING something that helps everyone (a codemod, a tool) "
+        "IS a win, because the thing exists now. Not wins: agreeing on a plan, "
+        "attending a productive meeting, or work that overran its estimate "
+        "without producing a stated result.",
+    ),
+    (
+        "collaboration",
+        "Another person was actually involved in the work: pairing, unblocking "
+        "them, reviewing their code, answering their question, a cross-team "
+        "back-and-forth, walking someone through something. If another person "
+        "was involved at all, collaboration applies even when other tags also "
+        "apply — helping someone and then writing it up in the wiki is "
+        "collaboration AND leadership, not leadership instead. Onboarding "
+        "someone, walking someone through a system, demoing to the team and "
+        "taking their feedback: all collaboration, whatever else is also true. "
+        "Sitting in a meeting and only listening is not collaboration. It "
+        "means you and another person worked something out together.",
+    ),
+    (
+        "leadership",
+        "Work NOBODY ASKED FOR that raises the team's floor, or deliberately "
+        "stepping back so someone else can own something. A runbook nobody "
+        "asked about, docs nobody requested, careful interview feedback, an "
+        "RFC setting direction, disagreeing with a design and changing it, "
+        "letting a junior drive, a codemod so nobody else has to do the "
+        "migration by hand, writing a handover so nobody has to reverse-engineer "
+        "your work. Reviewing a pull request, unblocking a teammate, or "
+        "agreeing on a shared approach in a meeting are not leadership by "
+        "themselves. When leadership applies alongside collaboration, use both.",
+    ),
+    (
+        "growth",
+        "The entry shows the PERSON changing, not just the task moving. "
+        "Realising something, being wrong, being surprised, sitting with "
+        "discomfort, finally doing the thing they had put off. A single wry "
+        "or self-aware aside is enough — 'feels obvious now', 'which surprised "
+        "me', 'trying to be patient about it', 'that I keep saying I'll write', "
+        "'the test was the harder part'.",
+    ),
+    (
+        "challenges",
+        "The work was a slog or it went sideways: tedium, a hard investigation, "
+        "a bad estimate that hurt, an incident, an ugly merge, unglamorous "
+        "groundwork. Tag challenges whenever the work involved real friction, "
+        "even if it was resolved and the entry sounds calm about it. Always "
+        "challenges: a production incident (whoever caused it), an on-call "
+        "surprise or discovering something has been quietly broken for months, "
+        "hunting down a confusing cause, work that took materially longer than "
+        "estimated because it was tangled. What is NOT challenges: a passing "
+        "'boring' or 'took longer than planned' attached to an entry whose "
+        "real story is a clean result.",
+    ),
+]
+TAGS = [name for name, _ in TAG_CATALOG]
 
 PROJECT_NAME = "Front-End Refactor"
 
@@ -41,6 +108,7 @@ PROJECT_END_DAYS_AGO = 17
 SCHEMA = """
 DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS projects;
+DROP TABLE IF EXISTS tags;
 DROP TABLE IF EXISTS entries;
 
 CREATE TABLE users (
@@ -57,12 +125,17 @@ CREATE TABLE projects (
     end_date TEXT      -- ISO date, nullable if ongoing
 );
 
+CREATE TABLE tags (
+    name TEXT PRIMARY KEY,   -- the exact string the tagger must return
+    explanation TEXT NOT NULL
+);
+
 CREATE TABLE entries (
     id INTEGER PRIMARY KEY,
     user_id INTEGER,
     entry_date TEXT,        -- ISO date
     raw_text TEXT,          -- the "voice journal" text, written as if transcribed from speech
-    tags TEXT,              -- comma-separated: wins, collaboration, leadership, growth, challenges
+    tags TEXT,              -- comma-separated names from the tags table
     auto_tags TEXT,         -- comma-separated open-vocabulary keywords, filled in by tagger.py.
                             -- NULL until tagged. Never feeds a chart — see Backend.md.
     project_id INTEGER,     -- nullable, FK to projects
@@ -392,6 +465,11 @@ def seed():
         (1, 1, PROJECT_NAME, project_start.isoformat(), project_end.isoformat()),
     )
 
+    conn.executemany(
+        "INSERT INTO tags (name, explanation) VALUES (?, ?)",
+        TAG_CATALOG,
+    )
+
     for days_ago, raw_text, tags, is_project, acknowledged_by, impact_note in ENTRIES:
         entry_date = today - timedelta(days=days_ago)
         conn.execute(
@@ -430,6 +508,7 @@ def seed():
     print(f"  Project         {PROJECT_NAME} "
           f"({project_start.isoformat()} to {project_end.isoformat()}, {project_entries} entries)")
     print(f"  Acknowledged    {acknowledged} entries ({acknowledged * 100 // len(ENTRIES)}%)")
+    print(f"  Tag catalog     {len(TAG_CATALOG)} tags (name + explanation)")
     print()
     print("  Tag counts")
     for tag in TAGS:

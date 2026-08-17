@@ -44,7 +44,7 @@ import anthropic
 import db
 import tagger
 from llm import MissingAPIKeyError, load_api_key
-from prompt_variants import VARIANTS
+from prompt_variants import VARIANTS, build_prompt
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -60,17 +60,17 @@ DIM, GREEN, RED, YELLOW, RESET = (
 # Running a variant
 # ---------------------------------------------------------------------------
 
-def run_variant(name, entries, project_names):
+def run_variant(name, entries, project_names, tags):
     """Tag every entry with one prompt variant. Returns a cacheable dict."""
     client = anthropic.Anthropic(api_key=load_api_key())
-    system_prompt = VARIANTS[name]
+    system_prompt = build_prompt(tags, name)
     tokens_in = tokens_out = 0
     predictions = []
 
     def work(entry):
         # vocabulary deliberately omitted — see CONTROLS in the module docstring.
         return tagger.tag_entry(client, entry["raw_text"], project_names,
-                                system_prompt=system_prompt)
+                                system_prompt=system_prompt, tags=tags)
 
     with ThreadPoolExecutor(max_workers=tagger.WORKERS) as pool:
         for entry, (result, usage) in zip(entries, pool.map(work, entries)):
@@ -117,8 +117,9 @@ def load(name):
 
 def score(run):
     """Exact match plus per-tag tp/fp/fn and the predicted-cardinality spread."""
+    names = db.get_tag_names()
     exact = 0
-    per_tag = {tag: {"tp": 0, "fp": 0, "fn": 0} for tag in db.TAGS}
+    per_tag = {tag: {"tp": 0, "fp": 0, "fn": 0} for tag in names}
     sizes = {}
     misses = []
 
@@ -129,7 +130,7 @@ def score(run):
             exact += 1
         else:
             misses.append(p)
-        for tag in db.TAGS:
+        for tag in names:
             if tag in predicted and tag in actual:
                 per_tag[tag]["tp"] += 1
             elif tag in predicted:
@@ -228,7 +229,7 @@ def print_diff(a, b):
           f"{sb['exact']}/{sb['n']} ({sb['pct']}%)   {arrow}{RESET}")
     print()
     print(f"  {'tag':<14} {'correct':>16} {'extra':>14} {'missed':>14}")
-    for tag in db.TAGS:
+    for tag in db.get_tag_names():
         ta, tb = sa["per_tag"][tag], sb["per_tag"][tag]
         print(f"  {tag:<14} "
               f"{ta['tp']:>7} → {tb['tp']:<6} "
@@ -272,9 +273,10 @@ def main():
                 return 1
             entries = db.get_all_entries()
             project_names = db.list_project_names()
+            tags = db.get_tags()
             load_api_key()
             print(f"\n  Running {args.run} over {len(entries)} entries…")
-            run = run_variant(args.run, entries, project_names)
+            run = run_variant(args.run, entries, project_names, tags)
             save(run)
             print_score(run, args.verbose)
         elif args.show:

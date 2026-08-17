@@ -24,8 +24,6 @@ from datetime import date, datetime, timedelta
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "notch.db")
 
-TAGS = ["wins", "collaboration", "leadership", "growth", "challenges"]
-
 
 class NoDatabaseError(Exception):
     """Raised when notch.db doesn't exist yet — the user needs to run seed_db.py."""
@@ -97,6 +95,34 @@ def get_user():
     row = conn.execute("SELECT * FROM users WHERE id = 1").fetchone()
     conn.close()
     return {"name": row["name"], "role": row["role"]}
+
+
+def get_tags():
+    """
+    The tag catalog: [{"name", "explanation"}, ...] in seed order.
+
+    This is what the tagger slips into the prompt. Adding a row to the `tags`
+    table (and re-seeding) is how a new tag becomes available — the prompt has
+    no hardcoded names.
+    """
+    conn = _connect()
+    try:
+        rows = conn.execute(
+            "SELECT name, explanation FROM tags ORDER BY rowid"
+        ).fetchall()
+    except sqlite3.OperationalError as exc:
+        conn.close()
+        raise NoDatabaseError(
+            "This database has no tags table.\n"
+            "Run  python seed_db.py  to rebuild it."
+        ) from exc
+    conn.close()
+    return [{"name": r["name"], "explanation": r["explanation"]} for r in rows]
+
+
+def get_tag_names():
+    """Just the names, in catalog order. Used for counts, charts, and the enum."""
+    return [t["name"] for t in get_tags()]
 
 
 def get_entries_between(start_iso, end_iso):
@@ -245,11 +271,12 @@ def count_all_entries():
 # ---------------------------------------------------------------------------
 
 def tag_counts(entries):
-    """{'wins': 7, 'collaboration': 4, ...} — a raw count per tag."""
+    """{'wins': 7, 'collaboration': 4, ...} — a raw count per catalog tag."""
+    names = get_tag_names()
     counts = Counter()
     for entry in entries:
         counts.update(entry["tags"])
-    return {tag: counts.get(tag, 0) for tag in TAGS}
+    return {tag: counts.get(tag, 0) for tag in names}
 
 
 def tag_mix_percent(entries):
@@ -260,10 +287,11 @@ def tag_mix_percent(entries):
     toward both, so these deliberately don't sum to 100. That's the honest way to
     read "how much of my week involved collaboration?"
     """
+    names = get_tag_names()
     if not entries:
-        return {tag: 0.0 for tag in TAGS}
+        return {tag: 0.0 for tag in names}
     counts = tag_counts(entries)
-    return {tag: round(100 * counts[tag] / len(entries), 1) for tag in TAGS}
+    return {tag: round(100 * counts[tag] / len(entries), 1) for tag in names}
 
 
 def auto_tag_counts(entries, limit=None):
@@ -271,7 +299,7 @@ def auto_tag_counts(entries, limit=None):
     Raw counts for the open-vocabulary tags: [('flaky tests', 4), ('oncall', 3), ...].
 
     Counts only — deliberately no percentages, and this never reaches charts.py.
-    The fixed five are a closed set, so "collaboration was 40% of the week" is a
+    The catalog tags are a closed set, so "this tag was 40% of the week" is a
     stable claim you can plot and compare across weeks. Auto tags aren't: the
     model may say 'flaky tests' one week and 'test flakiness' the next, which
     would silently split one real theme across two bars and make a

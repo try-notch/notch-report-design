@@ -217,10 +217,17 @@ def report_project(user, project_name):
 
 def report_tag(user, tag):
     step("1/5", "Fetching entries from SQLite…")
+    catalog = db.get_tag_names()
+    if tag not in catalog:
+        fail(f"No tag named \"{tag}\" in the catalog.")
+        print(f"     Tags in the catalog: {', '.join(catalog) or '(none)'}")
+        print()
+        return None
+
     entries = db.get_entries_by_tag(tag)
     if not entries:
         fail(f"No entries tagged \"{tag}\".")
-        print(f"     Tags in use: {', '.join(db.TAGS)}")
+        print(f"     Tags in the catalog: {', '.join(catalog)}")
         print()
         return None
 
