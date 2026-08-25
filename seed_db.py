@@ -114,7 +114,9 @@ DROP TABLE IF EXISTS entries;
 CREATE TABLE users (
     id INTEGER PRIMARY KEY,
     name TEXT,
-    role TEXT
+    role TEXT,              -- job title, e.g. "Software Engineer"
+    industry TEXT,          -- e.g. "Technology", collected at onboarding
+    years_experience INTEGER  -- whole years in the field, collected at onboarding
 );
 
 CREATE TABLE projects (
@@ -454,8 +456,9 @@ def seed():
     conn.executescript(SCHEMA)
 
     conn.execute(
-        "INSERT INTO users (id, name, role) VALUES (?, ?, ?)",
-        (1, "Jordan Kim", "Software Engineer"),
+        "INSERT INTO users (id, name, role, industry, years_experience) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (1, "Jordan Kim", "Software Engineer", "Technology", 5),
     )
 
     project_start = today - timedelta(days=PROJECT_START_DAYS_AGO)
@@ -503,6 +506,7 @@ def seed():
     print("  Seeded notch.db")
     print("  " + "-" * 52)
     print(f"  User            Jordan Kim (Software Engineer)")
+    print(f"  Industry        Technology · 5 years experience")
     print(f"  Entries         {len(ENTRIES)}")
     print(f"  Date range      {oldest.isoformat()} to {newest.isoformat()}")
     print(f"  Project         {PROJECT_NAME} "

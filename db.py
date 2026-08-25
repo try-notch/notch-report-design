@@ -94,7 +94,12 @@ def get_user():
     conn = _connect()
     row = conn.execute("SELECT * FROM users WHERE id = 1").fetchone()
     conn.close()
-    return {"name": row["name"], "role": row["role"]}
+    return {
+        "name": row["name"],
+        "role": row["role"],
+        "industry": row["industry"],
+        "years_experience": row["years_experience"],
+    }
 
 
 def get_tags():
