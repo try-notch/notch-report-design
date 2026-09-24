@@ -261,7 +261,11 @@ has to pick one reading of each; §3's DDL wins where the doc says so.
 3. **Grow and persist the capture call.** Add `summary`, `takeaways` and `mood` to
    the tagger's schema (iOS E2's own proposal), save every field it returns, and
    resolve `project_match` to an id. Re-run the eval afterwards: the prompt grows.
-4. **Add speech-to-text** in front of it.
+4. **Add speech-to-text** in front of it. *Decided (Chetan, Sep 24):* OpenRouter's
+   `POST /api/v1/audio/transcriptions` with `openai/whisper-large-v3` — no on-device or
+   local model. OpenRouter caps a multipart upload at 25 MB (the same cap iOS §5 sets)
+   and its upstream providers time out after 60 seconds per request, so an 18-minute
+   catch-up may need splitting. Whether it takes the app's AAC `.m4a` as-is is untested.
 5. **Rebuild report inputs around a date range**: per-day momentum, project
    breakdown, notch/project/milestone counts, and a report schema that fills
    whatever document shape disagreement 3 settles on. Store the result.
