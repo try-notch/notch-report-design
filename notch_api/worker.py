@@ -41,7 +41,7 @@ class LazyClient:
 
 
 class JobRunner:
-    def __init__(self, db_path, *, client, transcode, audio_dir=None, workers=4, inline=False):
+    def __init__(self, db_path, *, client, transcode, audio_dir, workers=4, inline=False):
         self.db_path, self.client, self.transcode, self.audio_dir = db_path, client, transcode, audio_dir
         self._pool = None if inline else ThreadPoolExecutor(workers, thread_name_prefix="notch-job")
 

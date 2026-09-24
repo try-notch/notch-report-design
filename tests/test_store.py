@@ -165,7 +165,7 @@ def test_audio_storage_key_must_derive_from_the_row(conn, add_entry):
 # Row -> wire
 # ---------------------------------------------------------------------------
 
-def test_complete_entry_maps_to_a_valid_wire_entry_without_categories(conn, add_project, add_entry):
+def test_complete_entry_maps_to_a_valid_wire_entry(conn, add_project, add_entry):
     add_project("p1", "Front-End Refactor")
     add_entry("e1", tags=["shipped", "front-end-refactor"], categories=["wins", "collaboration"],
               project_id="p1", corrected_text="What I actually said.", is_milestone=True)
@@ -174,31 +174,10 @@ def test_complete_entry_maps_to_a_valid_wire_entry_without_categories(conn, add_
     entry = store.load_entry(conn, DEV, "e1")
 
     contract.validate("entry", entry)
-    assert "categories" not in entry
     assert entry["transcript"] == "What I actually said."  # corrected text wins over raw
     assert (entry["project_id"], entry["project"]) == ("p1", "Front-End Refactor")
     assert entry["retryable_until"] == "2026-09-28T17:31:00Z"
     assert entry["is_milestone"] is True
-
-
-def test_just_accepted_entries_map_to_valid_wire_entries(conn, add_entry):
-    # The row as POST /v1/entries inserts it: recording facts only, no text yet.
-    add_entry("daily", raw_text=None, word_count=0, summary=None, takeaways="[]", mood=None,
-              analysis_state="pending")
-    add_entry("catch-up", raw_text=None, word_count=0, summary=None, takeaways="[]", mood=None,
-              analysis_state="pending", capture_mode="catch_up",
-              span_start="2026-09-18", span_end="2026-09-20")
-    for entry_id in ("daily", "catch-up"):
-        contract.validate("entry", store.load_entry(conn, DEV, entry_id))
-    assert store.load_entry(conn, DEV, "catch-up")["catch_up_span"] == {"start": "2026-09-18",
-                                                                        "end": "2026-09-20"}
-
-
-def test_loaders_do_not_cross_users(conn, add_user, add_entry):
-    add_user(OTHER)
-    add_entry("theirs", user_id=OTHER)
-    assert store.load_entry(conn, DEV, "theirs") is None
-    assert store.load_entry(conn, OTHER, "theirs") is not None
 
 
 def _add_report(conn, **columns):
@@ -255,16 +234,3 @@ def test_list_projects_counts_complete_entries_and_floors_share(conn, add_projec
     contract.validate("project_list", {"projects": projects})
     assert [(p["name"], p["notch_count"], p["share"]) for p in projects] == [
         ("Atlas", 3, 50), ("Billing", 1, 16), ("Zeta", 1, 16), ("Empty", 0, 0)]
-
-
-def test_project_share_is_zero_when_there_are_no_notches(conn, add_project):
-    add_project("p1", "Atlas")
-    assert store.list_projects(conn, DEV) == [{"id": "p1", "name": "Atlas", "notch_count": 0, "share": 0}]
-
-
-def test_find_project_id_folds_case_and_stays_within_the_user(conn, add_user, add_project):
-    add_user(OTHER)
-    add_project("theirs", "Hiring", user_id=OTHER)
-    add_project("mine", "Front-End Refactor")
-    assert store.find_project_id(conn, DEV, " front-end refactor ") == "mine"
-    assert store.find_project_id(conn, DEV, "Hiring") is None

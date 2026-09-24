@@ -4,14 +4,15 @@ classify.py — the closed-set half of the capture-time analysis, asked of Jev.
 A notch's five report categories, its mood and its project are choices from a
 fixed list, not writing. Jev (OpenRouter's typed-decisions model) answers each as
 a probability instead of a label, in a fraction of a second, so the cut-offs are
-ours to set (config.CATEGORY_THRESHOLD, config.PROJECT_CONFIDENCE) and to measure
+ours to set (config.CATEGORY_THRESHOLDS, config.PROJECT_CONFIDENCE) and to measure
 (eval_categories.py). The chat model keeps what is open-ended: tags, summary,
 takeaways, impact note, acknowledgement.
 
   categories  one yes/no (`noul`) per category. `true` is the category's catalog
               explanation from seed_db, the measured v4 policy; `false` states
-              what that explanation excludes. Applied at p >= CATEGORY_THRESHOLD;
-              if none clears it, the likeliest one, so every notch carries one.
+              what that explanation excludes. Each applies at p >= its own
+              threshold; if none does, the one nearest its threshold, so every
+              notch carries one.
   mood        a `choice` over up / flat / down.
   project     a `choice` over the user's project names plus `none`, taken only
               when it is not `none` and its confidence >= PROJECT_CONFIDENCE.
@@ -86,15 +87,24 @@ def classify(client, transcript, *, project_names):
 def parse(answers, project_names):
     """Jev's answers -> the classification, or ModelRefused if any answer is missing or malformed."""
     scores = {name: _probability(answers.get(name), name) for name in CATEGORIES}
-    categories = [c for c in CATEGORIES if scores[c] >= config.CATEGORY_THRESHOLD]
     project_name = None
     if project_names:
         answer = answers.get("project")
         choice = _choice(answer, "project", (*project_names, NO_PROJECT))
         if choice != NO_PROJECT and _confidence(answer, choice) >= config.PROJECT_CONFIDENCE:
             project_name = choice
-    return {"categories": categories or [max(CATEGORIES, key=scores.get)], "category_scores": scores,
+    return {"categories": categories(scores), "category_scores": scores,
             "mood": _choice(answers.get("mood"), "mood", MOODS), "project_name": project_name}
+
+
+def categories(scores, thresholds=None):
+    """
+    Every category at or over its threshold (config.CATEGORY_THRESHOLDS unless given), in
+    catalog order; if none is, the one with the largest p - threshold.
+    """
+    thresholds = thresholds or config.CATEGORY_THRESHOLDS
+    return ([c for c in CATEGORIES if scores[c] >= thresholds[c]]
+            or [max(CATEGORIES, key=lambda c: scores[c] - thresholds[c])])
 
 
 def _number(value):

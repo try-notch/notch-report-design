@@ -9,11 +9,13 @@ held to the same shapes as the real thing:
     schema the caller passed, so if analysis.py or reports.py changes a tool
     schema and the fake no longer fits, the offline run fails instead of quietly
     proving nothing. label_entry answers only the fields that schema asks for, so
-    the same fake serves the writing call and the extended fallback.
+    the same fake serves the writing call and the extended fallback. The answer
+    goes through the caller's `parse`, as the real client's does; a refusal from
+    it is raised at once (the real client would ask once more first).
   - FakeClient.decide answers every Jev question it is asked in Jev's own answer
-    shapes: a keyword-derived probability per category (below the threshold for
-    all of them when no keyword matches, so "the likeliest one" is exercised), the
-    first mood option, and the first project named in the entry, else `none`.
+    shapes: a keyword-derived probability per category (under every threshold
+    when no keyword matches, so the at-least-one rule is exercised), the first
+    mood option, and the first project named in the entry, else `none`.
   - FakeClient.transcribe raises TranscriptionFailed on blank text, as the real
     client does, and fake_transcode raises AudioUnreadable on empty input.
 
@@ -24,12 +26,10 @@ and `calls` (every call, in order, as (method, kwargs)).
 """
 
 import re
-from itertools import takewhile
 
 import jsonschema
 
 from .audio import AudioUnreadable
-from .config import TTS_VOICE
 from .openrouter import ModelRefused, TranscriptionFailed
 from .store import normalize_tag
 
@@ -53,12 +53,12 @@ _TAG_KEYWORDS = [("ship", "shipped"), ("pair", "pairing"), ("review", "code-revi
 _CATEGORY_KEYWORDS = {"wins": ("shipped", "fixed", "merged", "launched"),
                       "collaboration": ("paired", " with ", "helped", "reviewed"),
                       "challenges": ("flaky", "incident", "stuck", "slog")}
-# Jev probabilities: a keyword hit, and no hit. growth's miss is the likeliest of the misses.
-_HIT, _MISS = 0.9, {"growth": 0.3}
+# Jev probabilities: a keyword hit, over every category's threshold, and no hit, under all of them.
+_HIT, _MISS = 0.9, 0.1
 
 
 def fake_transcode(data):
-    """Stands in for audio.to_wav_16k: passes bytes through, so TEXT_MARKER survives."""
+    """Stands in for audio.to_m4a_16k: passes bytes through, so TEXT_MARKER survives."""
     if not data:
         raise AudioUnreadable("The recording is empty.")
     return data
@@ -75,7 +75,7 @@ class FakeClient:
         if self.fail_with is not None:
             raise self.fail_with
 
-    def transcribe(self, audio, *, fmt="wav", language="en"):
+    def transcribe(self, audio, *, fmt="m4a", language="en"):
         self._record("transcribe", audio=audio, fmt=fmt, language=language)
         if not audio.startswith(TEXT_MARKER):
             return DEFAULT_TRANSCRIPT
@@ -84,12 +84,8 @@ class FakeClient:
             raise TranscriptionFailed("No speech detected.")
         return text
 
-    def speech(self, text, *, voice=TTS_VOICE, fmt="mp3"):
-        self._record("speech", text=text, voice=voice, fmt=fmt)
-        return f"FAKE-{fmt.upper()}:{text}".encode()
-
     def tool_call(self, *, system, user, tool_name, description, parameters,
-                  temperature=0.0, max_tokens=4000):
+                  temperature=0.0, max_tokens=4000, parse=None):
         self._record("tool_call", system=system, user=user, tool_name=tool_name,
                      description=description, parameters=parameters,
                      temperature=temperature, max_tokens=max_tokens)
@@ -100,7 +96,8 @@ class FakeClient:
         else:
             raise ModelRefused(f"FakeClient has no canned answer for {tool_name!r}.")
         jsonschema.validate(payload, parameters)
-        return payload | self.overrides.get(tool_name, {})
+        answer = payload | self.overrides.get(tool_name, {})
+        return parse(answer) if parse else answer
 
     def decide(self, state, questions):
         self._record("decide", state=state, questions=questions)
@@ -114,33 +111,16 @@ class FakeClient:
 # ---------------------------------------------------------------------------
 
 def parse_label_message(user):
-    """
-    Split analysis.py's user message into (transcript, project names).
-
-    Expected shape: 'Label this entry:\\n\\n<transcript>\\n\\n...' then, somewhere after,
-    a line mentioning 'project' that ends in ':' followed by one name per line
-    (optionally bulleted), or with the names inline after the ':' separated by
-    ',' or ';'. The list ends at a blank line or at the next header line.
-    """
-    body = user.split("Label this entry:", 1)[-1].lstrip("\n")
-    transcript, _, context = body.partition("\n\n")
-    lines = context.splitlines()
-    for i, line in enumerate(lines):
-        if "project" not in line.lower() or ":" not in line:
-            continue
-        inline = line.split(":", 1)[1]
-        items = [inline] if inline.strip() else takewhile(
-            lambda l: l.strip() and not l.rstrip().endswith(":"), lines[i + 1:])
-        names = [n.strip(" \t-*•\"'") for item in items for n in re.split(r"[;,]", item)]
-        return transcript.strip(), [n for n in names if n and n.lower() not in ("none", "(none)")]
-    return transcript.strip(), []
+    """analysis._user_message's message -> (transcript, the '- name' lines under 'Active projects')."""
+    transcript, _, rest = user.removeprefix("Label this entry:\n\n").partition("\n\nActive projects")
+    return transcript.strip(), [line[2:] for line in rest.split("\n\n", 1)[0].splitlines() if line.startswith("- ")]
 
 
 def _decision(name, question, entry):
     """One question, answered in Jev's shape."""
     if question["type"] == "noul":
         hit = any(k in entry for k in _CATEGORY_KEYWORDS.get(name, ()))
-        return {"type": "noul", "noul": _HIT if hit else _MISS.get(name, 0.1)}
+        return {"type": "noul", "noul": _HIT if hit else _MISS}
     options = list(question["criteria"])
     if "none" in options:  # a match (the project): the first option the entry names
         pick = next((o for o in options if o != "none" and o.lower() in entry), "none")
@@ -173,7 +153,7 @@ def _write_report(user):
     ids = [i.strip() for i in re.findall(r"\[id ([^\]]+)\]", user)]
     first, second = (ids + [None, None])[:2]
     return {
-        "headline": "Shipping through the fear",
+        "headline": "Loose ends, tied off",
         "lede": "This stretch was mostly about finishing the things that had been hanging around.",
         "body": ("What is working is steady, visible progress: small pieces landing one after another.\n\n"
                  "Next, build on how well pairing went and bring someone in earlier on the next hard part."),

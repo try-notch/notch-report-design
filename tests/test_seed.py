@@ -13,7 +13,7 @@ import seed_db
 from notch_api import contract, seed, store
 from notch_api.config import DEV_USER_ID as DEV
 from notch_api.fakes import FakeClient
-from notch_api.openrouter import ModelRefused, ModelUnavailable
+from notch_api.openrouter import ModelUnavailable
 
 TODAY = date(2026, 9, 24)
 PROJECT_ENTRIES = {seed.entry_id(n) for n, e in enumerate(seed_db.ENTRIES) if e[3]}
@@ -87,25 +87,6 @@ def test_reseeding_replaces_the_notches_and_keeps_a_project_the_user_already_has
     assert conn.execute("SELECT max(recorded_at) FROM entries").fetchone()[0] == "2026-10-01T17:30:00Z"
     on_mine = {r["id"] for r in conn.execute("SELECT id FROM entries WHERE project_id = 'mine'")}
     assert on_mine == PROJECT_ENTRIES
-
-
-class _RefusesFirstCall(FakeClient):
-    refused = False
-
-    def tool_call(self, **kwargs):
-        if not self.refused:
-            self.refused = True
-            raise ModelRefused("The model did not call label_entry.")
-        return super().tool_call(**kwargs)
-
-
-def test_a_refusal_is_retried_once(db_path, conn):
-    client = _RefusesFirstCall()
-    _seed(db_path, client, workers=1)
-
-    assert client.refused
-    states = {r[0] for r in conn.execute("SELECT analysis_state FROM entries")}
-    assert states == {"complete"}
 
 
 def test_a_model_that_keeps_failing_stops_the_seed(db_path):

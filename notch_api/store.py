@@ -1,5 +1,5 @@
 """
-store.py — SQLite access, time and id helpers, and the row → wire mappers.
+store.py — SQLite access, time and id helpers, the row → wire mappers, and ApiError.
 
 Everything that turns a database row into what the iOS client reads lives here,
 so there is one place where `categories` could leak onto the wire (it does not:
@@ -24,6 +24,16 @@ from datetime import date, datetime, timezone
 from . import config
 
 SCHEMA_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schema.sql")
+
+
+class ApiError(Exception):
+    """A request the API refuses: `code` for the error envelope, `status` for the HTTP answer."""
+    retryable = False
+
+    def __init__(self, code, status, message):
+        super().__init__(message)
+        self.code, self.status, self.message = code, status, message
+
 
 # ---------------------------------------------------------------------------
 # Time and ids
@@ -164,6 +174,16 @@ def json_dump(value):
 def json_list(text):
     """A JSON array column -> list. NULL (e.g. a report's unset project_breakdown) -> []."""
     return json.loads(text) if text else []
+
+
+def loose_json(value):
+    """A model's field, with a nested array or object it sent as JSON text read back."""
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except ValueError:
+            pass
+    return value
 
 
 # ---------------------------------------------------------------------------

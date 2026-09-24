@@ -5,21 +5,23 @@ TEXT_MARKER, so a test picks its transcript by picking its audio bytes. Jev's ow
 answers are parsed in test_classify.py; here it is either answering or down.
 """
 
+import base64
 import json
-import os
+import subprocess
 
 import pytest
 
 import prompt_variants
 import seed_db
-from notch_api import analysis, contract, store
+from notch_api import analysis, audio, contract, store
 from notch_api.audio import AudioUnreadable
-from notch_api.config import DEV_USER_ID as DEV
+from notch_api.config import DEV_USER_ID as DEV, MAX_UPLOAD_BYTES
 from notch_api.fakes import TEXT_MARKER, FakeClient, fake_transcode, parse_label_message
 from notch_api.openrouter import ModelRefused, ModelUnavailable
 
 OTHER = "00000000-0000-4000-8000-000000000002"
 SPOKEN = "Shipped the Front-End Refactor login page with Dana today."
+AUDIO = TEXT_MARKER + SPOKEN.encode()
 
 
 def _label(client, transcript=SPOKEN, projects=(), vocabulary=()):
@@ -47,28 +49,6 @@ def _labels(client):
     return [(kw["system"], kw["parameters"]) for method, kw in client.calls if method == "tool_call"]
 
 
-@pytest.fixture
-def capture(conn, audio_dir):
-    """
-    capture(entry_id, audio) -> job_id. What app.py leaves behind after a 202: a pending
-    entry, its queued job, an audio_objects row and the file at <audio_dir>/<storage_key>.
-    """
-    def add(entry_id, audio=TEXT_MARKER + SPOKEN.encode()):
-        job_id, key = store.new_id(), f"{DEV}/{entry_id}/000"
-        with conn:
-            conn.execute("INSERT INTO entries (id, user_id, recorded_at, duration_seconds)"
-                         " VALUES (?, ?, '2026-09-21T17:30:00Z', 24)", (entry_id, DEV))
-            conn.execute("INSERT INTO capture_jobs (id, user_id, entry_id) VALUES (?, ?, ?)", (job_id, DEV, entry_id))
-            conn.execute("INSERT INTO audio_objects (id, user_id, capture_job_id, entry_id, storage_key, byte_size)"
-                         " VALUES (?, ?, ?, ?, ?, ?)", (store.new_id(), DEV, job_id, entry_id, key, len(audio)))
-        path = os.path.join(audio_dir, key)
-        os.makedirs(os.path.dirname(path))
-        with open(path, "wb") as f:
-            f.write(audio)
-        return job_id
-    return add
-
-
 def _job(conn, job_id):
     return conn.execute("SELECT * FROM capture_jobs WHERE id = ?", (job_id,)).fetchone()
 
@@ -84,7 +64,9 @@ def test_jev_classifies_while_the_chat_model_writes():
     assert (result["classified_by"], result["categories"], result["mood"], result["project_name"]) == (
         "jev", ["wins", "collaboration"], "up", "Front-End Refactor")
     assert set(result["category_scores"]) == set(analysis.CATEGORIES)
-    assert result["summary"] == SPOKEN and result["tags"][0] == "front-end-refactor"
+    assert result["summary"] == SPOKEN
+    # §3.4: the project travels as project_id, and stops being mirrored into tags.
+    assert result["tags"] and not {"front-end-refactor", "data-platform"} & set(result["tags"])
 
 
 def test_messy_writing_is_cleaned_and_categories_never_become_tags():
@@ -180,7 +162,7 @@ def test_projects_are_matched_by_folded_name_and_never_created(conn, capture, ad
     add_user(OTHER)
     add_project("p-mine", "Front-End Refactor")
     add_project("p-theirs", "Atlas", user_id=OTHER)
-    capture("e1")
+    capture("e1", AUDIO)
     result = _label(FakeClient()) | {"project_name": name}
     with conn:
         analysis.apply_analysis(conn, DEV, "e1", SPOKEN, result)
@@ -206,7 +188,7 @@ def test_user_context_is_this_users_projects_and_most_used_tags(conn, add_user, 
 def test_a_capture_job_completes_with_an_entry_the_contract_accepts(conn, db_path, audio_dir, capture,
                                                                     add_project):
     add_project("p-fer", "Front-End Refactor")
-    job_id = capture("e1")
+    job_id = capture("e1", AUDIO)
     analysis.run_capture_job(db_path, job_id, client=FakeClient(), transcode=fake_transcode, audio_dir=audio_dir)
 
     job = _job(conn, job_id)
@@ -217,12 +199,27 @@ def test_a_capture_job_completes_with_an_entry_the_contract_accepts(conn, db_pat
     assert entry["analysis_state"] == "complete" and entry["transcript"] == SPOKEN
     assert entry["word_count"] == len(SPOKEN.split())
     assert (entry["project_id"], entry["project"]) == ("p-fer", "Front-End Refactor")
-    assert entry["tags"][0] == "front-end-refactor" and entry["retryable_until"] is not None
+    assert "front-end-refactor" not in entry["tags"] and entry["retryable_until"] is not None
     # The classification is stored for reports and the eval, and nowhere on the wire.
     stored = conn.execute("SELECT categories, category_scores, classified_by FROM entries WHERE id = 'e1'").fetchone()
     assert json.loads(stored["categories"]) == ["wins", "collaboration"] and stored["classified_by"] == "jev"
     assert json.loads(stored["category_scores"])["wins"] >= 0.5
-    assert not {"categories", "category_scores", "classified_by"} & set(entry)
+
+
+def test_an_18_minute_catch_up_goes_to_speech_to_text_well_inside_the_request_cap(conn, db_path, audio_dir,
+                                                                                   capture, tmp_path):
+    # §5 designs catch-ups up to 18 minutes. Noise is the hardest case for the encoder.
+    wav = tmp_path / "long.wav"
+    subprocess.run(["ffmpeg", "-nostdin", "-loglevel", "error", "-f", "lavfi", "-i", "anoisesrc=r=8000:d=1080",
+                    "-ac", "1", str(wav)], check=True)
+    client = FakeClient()
+    analysis.run_capture_job(db_path, capture("e1", wav.read_bytes()), client=client, transcode=audio.to_m4a_16k,
+                             audio_dir=audio_dir)
+
+    (sent,) = [kw for method, kw in client.calls if method == "transcribe"]
+    assert sent["fmt"] == "m4a"
+    assert len(base64.b64encode(sent["audio"])) < MAX_UPLOAD_BYTES  # ~5.8 MB; as 16-bit WAV it was ~46 MB
+    assert store.load_entry(conn, DEV, "e1")["analysis_state"] == "complete"
 
 
 def _undecodable(data):
@@ -238,7 +235,7 @@ def _undecodable(data):
 ], ids=["silence", "undecodable", "purged", "bad-label", "crash"])
 def test_each_failure_fails_the_job_and_its_entry_with_the_same_code(conn, db_path, audio_dir, capture,
                                                                      case, code):
-    job_id = capture("e1", case.get("audio", TEXT_MARKER + SPOKEN.encode()))
+    job_id = capture("e1", case.get("audio", AUDIO))
     if case.get("purged"):
         with conn:
             conn.execute("UPDATE audio_objects SET purged_at = ?", (store.now(),))
@@ -253,11 +250,12 @@ def test_each_failure_fails_the_job_and_its_entry_with_the_same_code(conn, db_pa
     assert (entry["analysis_state"], entry["analysis_failure_code"]) == ("failed", code)
     # Words heard before the failure are kept for a retry; nothing else is written.
     assert entry["transcript"] == (SPOKEN if code == "model_refused" else None)
+    assert entry["word_count"] == len((entry["transcript"] or "").split())
     assert entry["summary"] is None and entry["tags"] == []
 
 
 def test_a_finished_job_is_left_alone(conn, db_path, audio_dir, capture):
-    job_id = capture("e1")
+    job_id = capture("e1", AUDIO)
     client = FakeClient()
     analysis.run_capture_job(db_path, job_id, client=client, transcode=fake_transcode, audio_dir=audio_dir)
     before = (dict(_job(conn, job_id)), len(client.calls))
@@ -267,7 +265,7 @@ def test_a_finished_job_is_left_alone(conn, db_path, audio_dir, capture):
 
 def test_a_resumed_job_analyses_the_saved_transcript_instead_of_transcribing_again(conn, db_path, audio_dir,
                                                                                    capture):
-    job_id = capture("e1")
+    job_id = capture("e1", AUDIO)
     saved = "Paired with Dana on the flaky tests before the crash."
     with conn:  # the state a crash mid-analysis leaves behind
         conn.execute("UPDATE capture_jobs SET state = 'analyzing', started_at = ? WHERE id = ?", (store.now(), job_id))

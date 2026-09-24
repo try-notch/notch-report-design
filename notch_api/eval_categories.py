@@ -6,15 +6,16 @@ eval_categories.py — how well each classifier agrees with the hand-labelled ca
 Runs seed_db's 52 transcripts through both ways a notch gets its five categories:
 
   jev   classify.classify: one probability per category, applied at
-        config.CATEGORY_THRESHOLD (the likeliest one if none clears it)
+        config.CATEGORY_THRESHOLDS by classify.categories
   chat  analysis.classify_by_chat: the chat model with the measured v4 category
         prompt, the fallback when Jev fails
 
 and prints, for each, the exact-set match against seed_db's hand labels (the same
 strict metric as TAGGING_EVAL.md) and per-category tp / fp / fn. For Jev it also
-prints the per-category threshold that would have agreed with the labels most
-often. Those thresholds are chosen on the same 52 notches they are scored on, so
-they are flagged in-sample: a hint for where to look, not a setting to copy.
+prints the per-category threshold that agrees with the labels most often. Chosen
+on the same 52 notches they are scored on, those are in-sample and optimistic, so
+the tuning itself is also scored leave-one-out: each notch at the thresholds
+chosen from the other 51. That is the estimate of what tuning is worth.
 
 The hand labels are one person's judgement, not an oracle, so this is reported and
 never a gate. As in eval_tags.py, no project list or tag vocabulary is sent: they
@@ -78,12 +79,6 @@ def _cached(path):
         return None
 
 
-def jev_categories(scores, thresholds=None):
-    """classify.parse's rule over cached scores, optionally with a threshold per category."""
-    thresholds = thresholds or dict.fromkeys(CATEGORIES, config.CATEGORY_THRESHOLD)
-    return {c for c in CATEGORIES if scores[c] >= thresholds[c]} or {max(CATEGORIES, key=scores.get)}
-
-
 def score(expected, predicted):
     """-> (exact-set matches, {category: (tp, fp, fn)})."""
     counts = {c: (sum(c in e and c in p for e, p in zip(expected, predicted)),
@@ -100,23 +95,32 @@ def best_thresholds(expected, scores):
     return {c: max(THRESHOLDS, key=lambda t: (agreement(c, t), -abs(t - 0.5))) for c in CATEGORIES}
 
 
+def leave_one_out(expected, scores):
+    """Exact matches when each notch is classified at the best_thresholds of all the others."""
+    return sum(expected[i] == set(classify.categories(
+        scores[i], best_thresholds(expected[:i] + expected[i + 1:], scores[:i] + scores[i + 1:])))
+        for i in range(len(expected)))
+
+
 def report(raw):
     """The printed eval, as lines."""
-    expected = labels()
+    expected, scores = labels(), raw["jev"]
     total = len(expected)
-    jev = [jev_categories(s) for s in raw["jev"]]
-    best = best_thresholds(expected, raw["jev"])
-    tuned = [jev_categories(s, best) for s in raw["jev"]]
-    rows = {f"jev {config.JEV_MODEL} at {config.CATEGORY_THRESHOLD}": score(expected, jev),
+    best = best_thresholds(expected, scores)
+    jev = [classify.categories(s) for s in scores]
+    rows = {f"jev {config.JEV_MODEL}, configured thresholds": score(expected, jev),
             f"chat {config.CHAT_MODEL}, v4 prompt": score(expected, raw["chat"])}
     lines = [f"Category eval · {total} seed_db notches · exact set match against the hand labels", ""]
     lines += [f"  {name:<52} {exact:>2}/{total} ({100 * exact // total}%)" for name, (exact, _) in rows.items()]
-    lines += ["", f"  {'category':<15} {'jev tp fp fn':>14} {'chat tp fp fn':>15}   jev best threshold (in-sample)"]
+    lines += ["", f"  {'category':<15} {'jev tp fp fn':>14} {'chat tp fp fn':>15}   jev threshold: configured, "
+                  "best (in-sample)"]
     for c in CATEGORIES:
         (jt, jf, jn), (ct, cf, cn) = (counts[c] for _, counts in rows.values())
-        lines.append(f"  {c:<15} {jt:>6} {jf:>3} {jn:>3} {ct:>7} {cf:>3} {cn:>3}   {best[c]:.2f}")
-    exact, _ = score(expected, tuned)
-    lines += ["", f"  jev at the best thresholds: {exact}/{total} ({100 * exact // total}%) — in-sample, so optimistic"]
+        lines.append(f"  {c:<15} {jt:>6} {jf:>3} {jn:>3} {ct:>7} {cf:>3} {cn:>3}   "
+                     f"{config.CATEGORY_THRESHOLDS[c]:.2f}  {best[c]:.2f}")
+    held_out = leave_one_out(expected, scores)
+    lines += ["", f"  jev, each notch at thresholds tuned on the other {total - 1} (leave-one-out): "
+                  f"{held_out}/{total} ({100 * held_out // total}%)"]
     return lines
 
 

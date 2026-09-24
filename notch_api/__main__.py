@@ -29,7 +29,7 @@ def main():
         logging.getLogger(__name__).info("NOTCH_FAKE_MODELS=1: offline fake models, no OpenRouter calls")
     app = create_app(db_path=config.DB_PATH, audio_dir=config.AUDIO_DIR,
                      client=FakeClient() if fake else None,
-                     transcode=fake_transcode if fake else audio.to_wav_16k)
+                     transcode=fake_transcode if fake else audio.to_m4a_16k)
     uvicorn.run(app, host="127.0.0.1", port=config.PORT)
 
 

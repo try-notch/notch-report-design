@@ -7,10 +7,12 @@ must be a refusal (analysis.py then falls back to the chat model), never a guess
 import pytest
 
 import seed_db
-from notch_api import classify
+from notch_api import classify, config
 from notch_api.openrouter import ModelRefused
 
 PROJECTS = ["Billing Migration", "Front-End Refactor"]
+# One threshold per category, as config has; growth's is set apart so each case shows whose applies.
+THRESHOLDS = dict.fromkeys(classify.CATEGORIES, 0.5) | {"growth": 0.7}
 
 
 def _answers(scores=None, mood="flat", project=None):
@@ -35,11 +37,12 @@ def test_the_questions_carry_the_measured_catalog_and_ask_about_projects_only_wh
 
 
 @pytest.mark.parametrize("scores, expected", [
-    ({"wins": 0.5, "growth": 0.49}, ["wins"]),                      # the threshold itself applies
-    ({"wins": 0.9, "challenges": 0.7}, ["wins", "challenges"]),     # categories stack, catalog order
-    ({"growth": 0.3, "challenges": 0.2}, ["growth"]),               # none clears it: the likeliest one
+    ({"wins": 0.5, "growth": 0.69}, ["wins"]),                   # each category's own threshold, inclusive
+    ({"wins": 0.9, "challenges": 0.7}, ["wins", "challenges"]),  # categories stack, catalog order
+    ({"growth": 0.6, "challenges": 0.45}, ["challenges"]),       # none clears: nearest its threshold, not likeliest
 ])
-def test_categories_are_thresholded_and_never_empty(scores, expected):
+def test_categories_are_thresholded_per_category_and_never_empty(monkeypatch, scores, expected):
+    monkeypatch.setattr(config, "CATEGORY_THRESHOLDS", THRESHOLDS)
     result = classify.parse(_answers(scores), [])
     assert result["categories"] == expected
     assert result["category_scores"]["wins"] == scores.get("wins", 0.1)

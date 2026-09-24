@@ -132,7 +132,10 @@ def test_a_span_that_disagrees_with_the_mode_is_invalid_span(api, conn, mode, sp
     json.dumps(_meta(recorded_at="2026-09-21T17:30:00")),  # no zone
     json.dumps(_meta(duration_seconds=-1)),
     json.dumps(_meta(mode="catchUp")),                     # the Swift raw value, not the wire token
-])
+    json.dumps(_meta(recorded_at="0001-01-01T00:00:00+01:00")),  # before year 1 once in UTC
+    json.dumps(_meta(duration_seconds=10**400)),           # a JSON integer no float can hold
+    "[" * 60_000,                                          # nested past the parser's recursion limit
+], ids=["not-json", "path-escape", "no-zone", "negative", "swift-mode", "year-zero", "huge-duration", "too-deep"])
 def test_malformed_meta_is_refused_before_anything_is_stored(api, conn, audio_dir, tmp_path, meta):
     _refused(_upload(api, meta=meta), 400, "invalid_request")
     assert _count(conn, "entries") == 0
@@ -143,6 +146,14 @@ def test_the_audio_part_may_be_25_mb_and_not_a_byte_more(api, conn, audio_dir):
     _refused(_upload(api, audio=b"\0" * (config.MAX_UPLOAD_BYTES + 1)), 413, "payload_too_large")
     assert _count(conn, "entries") == 0 and _stored_files(audio_dir) == []
     _ok(_upload(api, audio=b"\0" * config.MAX_UPLOAD_BYTES), 202, "entry_accepted")
+
+
+def test_an_audio_part_without_a_filename_is_told_to_send_one(api, conn):
+    # Starlette reads a part with no filename as a text field, capped like the meta part.
+    response = api.post("/v1/entries", data={"meta": json.dumps(_meta())},
+                        files={"audio": (None, b"\0" * (app_module.FORM_SLACK + 1), "audio/mp4")})
+    assert "filename=" in _refused(response, 400, "invalid_request")["error"]["message"]
+    assert _count(conn, "entries") == 0
 
 
 def test_a_body_without_content_length_is_cut_off_as_it_streams(api, conn, monkeypatch):
@@ -207,6 +218,7 @@ def test_an_unauthenticated_upload_stores_nothing(api, conn, audio_dir):
     ("post", "/v1/entries", {"content": b"x", "headers": {"Content-Type": "multipart/form-data"}},
      400, "invalid_request"),                              # Starlette's multipart error
     ("post", "/v1/reports", {"content": b"{not json"}, 400, "invalid_request"),
+    ("post", "/v1/reports", {"content": b"[" * 60_000}, 400, "invalid_request"),  # nested past the recursion limit
 ])
 def test_every_refusal_is_the_error_envelope(api, add_user, add_entry, method, path, kwargs, status, code):
     add_user(OTHER)
@@ -296,28 +308,10 @@ def test_categories_never_reach_the_wire(api, conn, add_project):
 # The job runner
 # ---------------------------------------------------------------------------
 
-def _left_behind(conn, audio_dir, entry_id, state="queued"):
-    """What a crash leaves after a 202: a pending entry, its job in `state`, and the stored audio."""
-    job_id, key = store.new_id(), f"{DEV}/{entry_id}/000"
-    code = "model_unavailable" if state == "failed" else None
-    with conn:
-        conn.execute("INSERT INTO entries (id, user_id, recorded_at, analysis_state, analysis_failure_code) "
-                     "VALUES (?, ?, '2026-09-21T17:30:00Z', ?, ?)",
-                     (entry_id, DEV, "failed" if code else "pending", code))
-        conn.execute("INSERT INTO capture_jobs (id, user_id, entry_id, state, failure_code, started_at) "
-                     "VALUES (?, ?, ?, ?, ?, ?)", (job_id, DEV, entry_id, state, code, store.now()))
-        conn.execute("INSERT INTO audio_objects (id, user_id, capture_job_id, entry_id, storage_key, byte_size) "
-                     "VALUES (?, ?, ?, ?, ?, ?)", (store.new_id(), DEV, job_id, entry_id, key, len(AUDIO)))
-    os.makedirs(os.path.join(audio_dir, DEV, entry_id))
-    with open(os.path.join(audio_dir, key), "wb") as f:
-        f.write(AUDIO)
-    return job_id
-
-
 def test_jobs_left_unfinished_are_resumed_on_startup_and_finished_ones_are_not(db_path, audio_dir, conn,
-                                                                               add_entry):
-    queued = _left_behind(conn, audio_dir, "e1")
-    failed = _left_behind(conn, audio_dir, "e2", state="failed")
+                                                                               add_entry, capture):
+    queued = capture("e1", AUDIO)
+    failed = capture("e2", AUDIO, state="failed")
     add_entry("a")
     _, report_job, _ = accept_report(conn, DEV, {"id": "r1", "type": "week", "range_start": "2026-09-21",
                                                  "range_end": "2026-09-27", "range_label": "Sep 21 – Sep 27"})
@@ -333,8 +327,8 @@ def test_jobs_left_unfinished_are_resumed_on_startup_and_finished_ones_are_not(d
     assert sorted(method for method, _ in client.calls) == ["decide", "tool_call", "tool_call", "transcribe"]
 
 
-def test_the_pooled_runner_finishes_running_jobs_before_shutdown_returns(db_path, audio_dir, conn):
-    job_id = _left_behind(conn, audio_dir, "e1")
+def test_the_pooled_runner_finishes_running_jobs_before_shutdown_returns(db_path, audio_dir, conn, capture):
+    job_id = capture("e1", AUDIO)
     runner = worker.JobRunner(db_path, client=FakeClient(), transcode=fake_transcode, audio_dir=audio_dir)
     runner.submit_capture(job_id)
     runner.shutdown()

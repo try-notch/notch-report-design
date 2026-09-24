@@ -53,8 +53,8 @@ def seed(db_path, client, *, workers=4, today=None):
     Seed db_path and analyse every seeded notch with `client`.
 
     Returns [(entry_id, expected_categories, predicted_categories)], one per
-    seed_db.ENTRIES item in the same order. A ModelError is retried once per notch;
-    a second one propagates and the seed stops there.
+    seed_db.ENTRIES item in the same order. A ModelError propagates and the seed stops
+    there (the client has already retried it, and re-asked a refusal once).
     """
     today = today or datetime.now(timezone.utc).date()
     store.init_db(db_path)
@@ -81,7 +81,8 @@ def seed(db_path, client, *, workers=4, today=None):
             for start in range(0, len(order), workers):
                 chunk = order[start:start + workers]
                 projects, vocabulary = analysis.user_context(conn, DEV)
-                results = pool.map(lambda n: _analyse(client, seed_db.ENTRIES[n][1], projects, vocabulary), chunk)
+                results = pool.map(lambda n: analysis.analyze_text(
+                    client, seed_db.ENTRIES[n][1], project_names=projects, vocabulary=vocabulary), chunk)
                 for n, result in zip(chunk, results):
                     _, text, _, is_project, *_ = seed_db.ENTRIES[n]
                     result["project_name"] = seed_db.PROJECT_NAME if is_project else None
@@ -92,14 +93,6 @@ def seed(db_path, client, *, workers=4, today=None):
         conn.close()
     return [(entry_id(n), [c for c in analysis.CATEGORIES if c in labels.split(",")], predicted[n])
             for n, (_, _, labels, *_) in enumerate(seed_db.ENTRIES)]
-
-
-def _analyse(client, text, projects, vocabulary):
-    """analyze_text, retried once: a refusal (no tool call, a blank summary) is often a one-off."""
-    try:
-        return analysis.analyze_text(client, text, project_names=projects, vocabulary=vocabulary)
-    except ModelError:
-        return analysis.analyze_text(client, text, project_names=projects, vocabulary=vocabulary)
 
 
 def agreement(results):

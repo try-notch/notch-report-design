@@ -1,22 +1,21 @@
 """
 The model-facing edge: OpenRouterClient's retry and parsing rules (over httpx's
-MockTransport), the real ffmpeg transcode, and the offline doubles that stand in
-for both everywhere else.
+MockTransport), the real ffmpeg transcode, and the two things the offline double
+must keep doing for an offline run to prove anything.
 """
 
 import base64
-import io
 import json
 import subprocess
-import wave
 
 import httpx
 import jsonschema
 import pytest
 
-from notch_api import audio, openrouter
-from notch_api.config import CHAT_MODEL, DECISIONS_URL, JEV_MODEL, STT_MODEL, TTS_MODEL, TTS_VOICE
-from notch_api.fakes import GHOST_ID, TEXT_MARKER, FakeClient, fake_transcode, parse_label_message
+from notch_api import analysis, audio, openrouter
+from notch_api.config import (CHAT_MODEL, DECISIONS_URL, JEV_MODEL, MAX_UPLOAD_BYTES, STT_MODEL, TTS_MODEL,
+                               TTS_VOICE)
+from notch_api.fakes import GHOST_ID, FakeClient
 from notch_api.openrouter import (ModelRefused, ModelUnavailable, OpenRouterClient,
                                   TranscriptionFailed)
 
@@ -43,8 +42,8 @@ def _completion(arguments):
         {"type": "function", "function": {"name": "t", "arguments": arguments}}]}}]})
 
 
-def _call(client):
-    return client.tool_call(system="sys", user="usr", tool_name="t", description="d", parameters=TOOL)
+def _call(client, **kwargs):
+    return client.tool_call(system="sys", user="usr", tool_name="t", description="d", parameters=TOOL, **kwargs)
 
 
 @pytest.fixture
@@ -92,12 +91,17 @@ def test_retries_timeouts_and_in_band_provider_errors(sleeps):
     client, requests = _client(
         httpx.ConnectTimeout("connect"),
         httpx.ReadTimeout("read"),
+        httpx.DecodingError("bad gzip"),
         httpx.Response(200, json={"error": {"code": 502, "message": "provider returned error"}}),
+        # A provider that fails partway through generating: the error is inside the choice.
+        httpx.Response(200, json={"choices": [{"finish_reason": "error", "error": {"code": 502, "message": "x"}}]}),
         httpx.Response(200, text="<html>not json</html>"),
+        httpx.Response(200, json=[1, 2]),
         _completion('{"ok": true}'),
+        max_attempts=8,
     )
     assert _call(client) == {"ok": True}
-    assert len(requests) == 5
+    assert len(requests) == 8
 
 
 def test_gives_up_with_model_unavailable(sleeps):
@@ -120,19 +124,39 @@ def test_a_4xx_is_a_refusal_and_not_retried(response):
     assert exc.value.code == "model_refused" and not exc.value.retryable
 
 
-@pytest.mark.parametrize("unusable", [
-    httpx.Response(200, json={"choices": [{"message": {"content": "Sure! Here are the labels."}}]}),
-    _completion("{not json"),
-    _completion("[1, 2]"),
-], ids=["no-tool-call", "invalid-json", "not-an-object"])
-def test_a_reply_without_a_usable_call_is_asked_once_more_then_refused(unusable, sleeps):
+@pytest.mark.parametrize("unusable, why", [
+    (httpx.Response(200, json={"choices": [{"message": {"content": "Sure! Here are the labels."}}]}), "did not call"),
+    (_completion("{not json"), "not valid JSON"),
+    (_completion("[1, 2]"), "not an object"),
+    (httpx.Response(200, json={"choices": [{"finish_reason": "length", "message": {"tool_calls": [
+        {"type": "function", "function": {"name": "t", "arguments": '{"ok": tr'}}]}}]}), "cut off"),
+], ids=["no-tool-call", "invalid-json", "not-an-object", "cut-off"])
+def test_a_reply_without_a_usable_call_is_asked_once_more_then_refused(unusable, why, sleeps):
     client, requests = _client(unusable, _completion('{"ok": true}'))
     assert _call(client) == {"ok": True}
 
     client, requests = _client(unusable, unusable)
-    with pytest.raises(ModelRefused):
+    with pytest.raises(ModelRefused, match=why):
         _call(client)
     assert len(requests) == 2 and sleeps == []
+
+
+def test_an_answer_the_caller_refuses_is_asked_again_warmer_then_refused_saying_who_answered(sleeps):
+    def parse(arguments):
+        if not arguments["ok"]:
+            raise ModelRefused("not ok")
+        return "used"
+
+    no = httpx.Response(200, json={"provider": "Baidu", "choices": [{"finish_reason": "tool_calls", "message": {
+        "tool_calls": [{"type": "function", "function": {"name": "t", "arguments": '{"ok": false}'}}]}}]})
+    client, requests = _client(no, _completion('{"ok": true}'))
+    assert _call(client, parse=parse) == "used"
+    # At temperature 0 the same miss would come straight back.
+    assert [json.loads(r.content)["temperature"] for r in requests] == [0.0, 0.4]
+
+    client, _ = _client(no, no)
+    with pytest.raises(ModelRefused, match=r"^not ok \(finish_reason=tool_calls, provider=Baidu\)$"):
+        _call(client, parse=parse)
 
 
 # ---------------------------------------------------------------------------
@@ -155,6 +179,13 @@ def test_silence_is_transcription_failed():
     with pytest.raises(TranscriptionFailed, match="No speech detected.") as exc:
         client.transcribe(b"RIFF")
     assert exc.value.code == "transcription_failed"
+
+
+def test_audio_over_the_request_cap_is_refused_without_being_sent():
+    client, requests = _client()
+    with pytest.raises(ModelRefused, match="cap"):
+        client.transcribe(bytes(MAX_UPLOAD_BYTES * 3 // 4 + 3))  # base64 makes it 4 bytes over
+    assert requests == []
 
 
 def test_speech_returns_the_audio_bytes_and_reads_a_json_answer_as_an_error(sleeps):
@@ -195,140 +226,45 @@ def test_from_env_needs_a_key(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# audio.to_wav_16k — real ffmpeg
+# audio.to_m4a_16k — real ffmpeg
 # ---------------------------------------------------------------------------
 
-def test_to_wav_16k_turns_the_ios_recording_format_into_16k_mono_wav(tmp_path):
+def test_to_m4a_16k_turns_the_ios_recording_format_into_16k_mono_aac(tmp_path):
     m4a = tmp_path / "tone.m4a"
     subprocess.run(["ffmpeg", "-nostdin", "-loglevel", "error", "-f", "lavfi",
                     "-i", "sine=frequency=440:duration=1", "-ac", "1", "-ar", "44100",
                     "-c:a", "aac", str(m4a)], check=True)
+    out = tmp_path / "out.m4a"
+    out.write_bytes(audio.to_m4a_16k(m4a.read_bytes()))
 
-    wav_bytes = audio.to_wav_16k(m4a.read_bytes())
-
-    assert wav_bytes[:4] == b"RIFF" and wav_bytes[8:12] == b"WAVE"
-    with wave.open(io.BytesIO(wav_bytes)) as wav:  # also proves the header sizes are real
-        assert (wav.getframerate(), wav.getnchannels(), wav.getsampwidth()) == (16000, 1, 2)
-        assert abs(wav.getnframes() - 16000) < 800
+    probe = json.loads(subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "stream=codec_name,sample_rate,channels:format=duration",
+         "-of", "json", str(out)], capture_output=True, check=True).stdout)
+    stream, = probe["streams"]
+    assert (stream["codec_name"], stream["sample_rate"], stream["channels"]) == ("aac", "16000", 1)
+    assert abs(float(probe["format"]["duration"]) - 1) < 0.1
 
 
 @pytest.mark.parametrize("data", [b"", b"this is not audio at all"])
 def test_undecodable_audio_is_audio_unreadable(data):
     with pytest.raises(audio.AudioUnreadable) as exc:
-        audio.to_wav_16k(data)
+        audio.to_m4a_16k(data)
     assert exc.value.code == "audio_unreadable"
 
 
 # ---------------------------------------------------------------------------
-# fakes
+# The offline double: what it must keep doing for the offline runs to mean anything
 # ---------------------------------------------------------------------------
 
-# The label_entry tool as the spec defines it; the fake's canned answer must fit.
-LABEL_ENTRY = {
-    "type": "object",
-    "properties": {
-        "fixed_tags": {"type": "array", "items": {"enum": ["wins", "collaboration", "leadership",
-                                                           "growth", "challenges"]}},
-        "tags": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 5},
-        "summary": {"type": "string"},
-        "takeaways": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 3},
-        "mood": {"enum": ["up", "flat", "down"]},
-        "impact_note": {"type": "string"},
-        "acknowledged_by": {"type": "string"},
-        "project_match": {"type": "object", "properties": {
-            "project_name": {"type": "string"}, "confidence": {"enum": ["high", "low", "none"]}},
-            "required": ["project_name", "confidence"], "additionalProperties": False},
-    },
-    "required": ["fixed_tags", "tags", "summary", "takeaways", "mood", "impact_note",
-                 "acknowledged_by", "project_match"],
-    "additionalProperties": False,
-}
-
-
-def _label(client, user, parameters=LABEL_ENTRY):
-    return client.tool_call(system="s", user=user, tool_name="label_entry", description="d",
-                            parameters=parameters)
-
-
-@pytest.mark.parametrize("context", [
-    "Active projects:\n- Data Platform\n- Front-End Refactor\n\nTags in use (reuse verbatim): shipped",
-    "Projects: Data Platform; Front-End Refactor\nTags in use: shipped, pairing",
-    "Your projects (copy a name verbatim):\nData Platform\nFront-End Refactor\nExisting tags:\nshipped",
-])
-def test_parse_label_message_reads_the_project_list_in_any_layout(context):
-    user = "Label this entry:\n\nWorked on the front-end refactor.\n\n" + context
-    transcript, projects = parse_label_message(user)
-    assert transcript == "Worked on the front-end refactor."
-    assert projects == ["Data Platform", "Front-End Refactor"]
-
-
-def test_fake_label_matches_a_named_project_and_fits_the_tool_schema():
-    user = ("Label this entry:\n\nShipped the Front-End Refactor login page with Dana.\n\n"
-            "Active projects:\n- Front-End Refactor")
-    label = _label(FakeClient(), user)
-    assert label["project_match"] == {"project_name": "Front-End Refactor", "confidence": "high"}
-    assert label["tags"][0] == "front-end-refactor"
-    assert {"wins", "collaboration"} <= set(label["fixed_tags"])
-    # A narrower label_entry (the writing call's) gets only the fields it asks for.
-    narrow = LABEL_ENTRY | {"properties": {k: LABEL_ENTRY["properties"][k] for k in ("tags", "summary")},
-                            "required": ["tags", "summary"]}
-    assert set(_label(FakeClient(), user, narrow)) == {"tags", "summary"}
-
-
-def test_fake_decide_answers_in_jevs_shapes():
-    questions = {"wins": {"type": "noul"}, "leadership": {"type": "noul"},
-                 "mood": {"type": "choice", "criteria": {"up": "", "flat": "", "down": ""}},
-                 "project": {"type": "choice", "criteria": {"Atlas": "", "Front-End Refactor": "", "none": ""}}}
-    answers = FakeClient().decide({"journal_entry": "Shipped the front-end refactor."}, questions)
-    assert answers["wins"]["noul"] > 0.5 > answers["leadership"]["noul"]
-    assert (answers["mood"]["choice"], answers["project"]["choice"]) == ("up", "Front-End Refactor")
-    unmatched = FakeClient().decide({"journal_entry": "Planning all day."}, questions)
-    assert unmatched["project"]["choice"] == "none"
-
-
-def test_fake_label_refuses_a_schema_it_no_longer_fits():
-    drifted = LABEL_ENTRY | {"required": LABEL_ENTRY["required"] + ["confidence_score"]}
+def test_the_fake_refuses_a_tool_schema_it_no_longer_fits():
+    drifted = analysis.LABEL_ENTRY | {"required": [*analysis.LABEL_ENTRY["required"], "confidence_score"]}
     with pytest.raises(jsonschema.ValidationError, match="confidence_score"):
-        _label(FakeClient(), "Label this entry:\n\nHello.", drifted)
+        FakeClient().tool_call(system="s", user="Label this entry:\n\nHello.", tool_name="label_entry",
+                               description="d", parameters=drifted)
 
 
-def test_fake_overrides_let_a_test_feed_messy_model_output():
-    client = FakeClient(overrides={"label_entry": {"fixed_tags": ["wins", "made-up"], "impact_note": " "}})
-    label = _label(client, "Label this entry:\n\nShipped it.")
-    assert label["fixed_tags"] == ["wins", "made-up"] and label["impact_note"] == " "
-
-
-def test_fake_report_cites_the_first_two_ids_plus_a_ghost():
-    user = "FACTS...\n[id seed-01] 2026-09-21 — ...\n[id seed-02] 2026-09-22 — ...\n[id seed-03] ..."
-    report = FakeClient().tool_call(system="s", user=user, tool_name="write_report", description="d",
-                                    parameters={"type": "object"})
-    cited = [h["source_entry_ids"] for h in report["highlights"]]
-    assert cited == [["seed-01", GHOST_ID], ["seed-02"], [GHOST_ID]]
-    assert 3 <= len(report["themes"]) <= 5 and "\n\n" in report["body"]
-
-
-def test_fake_transcribe_reads_the_marker_and_fails_on_silence():
-    client = FakeClient()
-    assert client.transcribe(TEXT_MARKER + "Fixed the flaky test.".encode()) == "Fixed the flaky test."
-    assert "Front-End Refactor" in client.transcribe(b"\x00\x01 real audio")
-    with pytest.raises(TranscriptionFailed):
-        client.transcribe(TEXT_MARKER + b"   ")
-
-
-def test_fake_fail_with_raises_from_every_call_and_records_it():
-    client = FakeClient(fail_with=ModelUnavailable("down"))
-    with pytest.raises(ModelUnavailable):
-        client.transcribe(b"x")
-    with pytest.raises(ModelUnavailable):
-        _label(client, "Label this entry:\n\nx")
-    with pytest.raises(ModelUnavailable):
-        client.decide({}, {})
-    assert [method for method, _ in client.calls] == ["transcribe", "tool_call", "decide"]
-    client.fail_with = None
-    assert client.transcribe(TEXT_MARKER + b"back") == "back"
-
-
-def test_fake_transcode_passes_bytes_through_and_rejects_empty():
-    assert fake_transcode(TEXT_MARKER + b"hi") == TEXT_MARKER + b"hi"
-    with pytest.raises(audio.AudioUnreadable):
-        fake_transcode(b"")
+def test_the_fake_report_always_cites_a_ghost_id():
+    """So every offline report run exercises reports._clean's id filter."""
+    report = FakeClient().tool_call(system="s", user="[id seed-01] ...", tool_name="write_report",
+                                    description="d", parameters={"type": "object"})
+    assert GHOST_ID in {i for h in report["highlights"] for i in h["source_entry_ids"]}

@@ -1,6 +1,6 @@
 """
 eval_categories.py: the numbers it prints are the evidence for keeping or moving
-config.CATEGORY_THRESHOLD, so the scoring is tested on hand-checked cases, and the
+config.CATEGORY_THRESHOLDS, so the scoring is tested on hand-checked cases, and the
 cache is tested for the one way it could mislead: answering for a model it was not
 made by.
 """
@@ -10,7 +10,7 @@ import json
 import pytest
 
 import seed_db
-from notch_api import config, eval_categories as ev
+from notch_api import classify, config, eval_categories as ev
 from notch_api.fakes import FakeClient
 from notch_api.openrouter import ModelUnavailable
 
@@ -32,8 +32,14 @@ def test_best_threshold_is_the_one_agreeing_most_often():
     scores = [_scores(wins=0.35), _scores(wins=0.6), _scores(wins=0.2), _scores(wins=0.3)]
     best = ev.best_thresholds(expected, scores)
     assert 0.3 < best["wins"] <= 0.35  # 0.5 would miss the 0.35 notch; below 0.3 lets a wrong one in
-    # And the Jev rule it is scored with is classify.parse's: never an empty set.
-    assert ev.jev_categories(_scores(growth=0.3)) == {"growth"}
+
+
+def test_leave_one_out_scores_each_notch_at_thresholds_tuned_without_it():
+    expected = [{"wins", "growth"}, {"wins", "growth"}, {"growth"}, {"growth"}]
+    scores = [_scores(growth=0.9, wins=w) for w in (0.35, 0.6, 0.2, 0.3)]
+    in_sample, _ = ev.score(expected, [classify.categories(s, ev.best_thresholds(expected, scores)) for s in scores])
+    # Tuned without it, the 0.35 notch's wins falls under the threshold the other three choose.
+    assert (in_sample, ev.leave_one_out(expected, scores)) == (4, 3)
 
 
 def test_the_cache_is_reused_for_the_same_model_and_redone_for_another(tmp_path, monkeypatch):

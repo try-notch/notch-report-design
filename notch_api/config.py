@@ -29,7 +29,8 @@ TTS_VOICE = "aura-2-thalia-en"
 # Typed decisions (the five categories, mood, project match). Not under /api/v1.
 JEV_MODEL = "typesafe/jev-1.13"
 DECISIONS_URL = "https://openrouter.ai/api/alpha/decisions"
-CATEGORY_THRESHOLD = 0.5   # a category applies at p >= this; if none does, the likeliest one
+# Tuned on the 52 seed_db hand labels: 58-61% exact match leave-one-out, against 48% at a flat 0.5.
+CATEGORY_THRESHOLDS = {"wins": 0.60, "collaboration": 0.50, "leadership": 0.40, "growth": 0.65, "challenges": 0.75}
 PROJECT_CONFIDENCE = 0.5   # below this, a project choice leaves the notch unassigned
 
 DB_PATH = os.environ.get("NOTCH_DB") or os.path.join(REPO_ROOT, "data", "notch_api.db")

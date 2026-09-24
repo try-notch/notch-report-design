@@ -20,17 +20,17 @@ winning v4 text with the seed catalog, sent verbatim (TAGGING_EVAL.md scored it)
 and IMPACT NOTE / ACKNOWLEDGED BY / PROJECT MATCH are sliced out of
 prompt_variants._SHARED_TAIL, not pasted, so they cannot drift from what was
 measured. Import fails if those sections move. Only the rest is new: TAGS
-replaces AUTO TAGS, because wire tags are now the app's hashtags (2-5, the
-project's handle included, no category names), and SUMMARY, TAKEAWAYS and MOOD
-are the fields a person actually reads.
+replaces AUTO TAGS, because wire tags are now the app's hashtags (2-5, never a
+project or category name: §3.4 stops mirroring the project into tags), and
+SUMMARY, TAKEAWAYS and MOOD are the fields a person actually reads.
 
 THE MODELS' ANSWERS ARE UNTRUSTED. openrouter.py does not check the arguments
 against the tool schema, so analyze_text() cleans up what can safely be cleaned
 (tags normalised, blanks dropped, categories filtered to the five, which never
-become tags) and raises ModelRefused for anything that would break the entry
-contract (no summary, an unknown mood). Categories are stored in the internal
-`categories` column for report facts, beside Jev's `category_scores`, and are
-never sent to the app.
+become tags) and refuses anything that would break the entry contract (no summary,
+an unknown mood): the chat model is asked once more, then it is ModelRefused.
+Categories are stored in the internal `categories` column for report facts, beside
+Jev's `category_scores`, and are never sent to the app.
 
 THE JOB FOLLOWS §3.5's MAP. Each state change writes the capture_jobs row and
 the entry's analysis_state in one transaction, so the two can never disagree.
@@ -40,7 +40,6 @@ stuck in 'processing'. A project is matched by folded name and never created:
 no match leaves the notch unassigned, which is better than a wrong project.
 """
 
-import json
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
@@ -48,7 +47,7 @@ from concurrent.futures import ThreadPoolExecutor
 import prompt_variants
 import seed_db
 
-from . import classify, config, store
+from . import classify, store
 from .audio import AudioUnreadable
 from .classify import CATEGORIES, MOODS
 from .openrouter import ModelError, ModelRefused
@@ -92,18 +91,14 @@ and used to find it later: systems, kinds of work, the shape of the day. 'shippe
 - REUSE BEFORE YOU COIN. The message lists the tags this user already has. If one fits,
   use it verbatim, even if you would have phrased it differently. Coin a new one only when
   nothing in the list covers the idea.
-- When the entry clearly belongs to one of the user's active projects, put that project's
-  name first as a handle: 'Front-End Refactor' becomes 'front-end-refactor'.
-- Never one of the five report categories (wins, collaboration, leadership, growth,
-  challenges); those are recorded separately. Never a person's name. Never a topic the
-  entry doesn't mention.
+- Never a project's name, and never one of the five report categories (wins,
+  collaboration, leadership, growth, challenges); both are recorded separately. Never a
+  person's name. Never a topic the entry doesn't mention.
 
 SUMMARY
 One or two sentences the person reads back later. Written to them: drop the 'I', and say
-'you' where a pronoun is needed. Concrete and plain: name what happened, in their terms,
-with no praise or drama they didn't express. For example: 'Shipped the auth migration to
-staging with Dana — the part you'd been dreading went smoothly.' or 'Rough day — the
-planning meeting ran long and nothing got decided.'
+'you' where a pronoun is needed. Concrete and plain: name what happened in their own terms,
+with no stock phrases and no praise or drama they didn't express.
 
 TAKEAWAYS
 One to three short sentences worth pulling out later: what got done, what was learned,
@@ -166,8 +161,7 @@ LABEL_ENTRY_FALLBACK = _closed({
 def _user_message(transcript, project_names, vocabulary):
     """
     tagger.tag_entry's message plus the project list. The vocabulary goes here, not in
-    the system prompt, because it changes per call. fakes.parse_label_message reads
-    this layout, so keep the project list first and 'project' out of the tags line.
+    the system prompt, because it changes per call. fakes.parse_label_message reads this layout.
     """
     projects = "".join(f"\n- {name}" for name in project_names) or " none"
     return (f"Label this entry:\n\n{transcript.strip()}\n\n"
@@ -181,19 +175,9 @@ def _text(value):
     return (value.strip() or None) if isinstance(value, str) else None
 
 
-def _json(value):
-    """Some providers send a nested array or object as its JSON text; read it back."""
-    if isinstance(value, str):
-        try:
-            return json.loads(value)
-        except ValueError:
-            pass
-    return value
-
-
 def _strings(value):
     """A list of strings from an array field. A lone string counts as a list of one."""
-    value = _json(value)
+    value = store.loose_json(value)
     value = [value] if isinstance(value, str) else value
     return [v for v in value if isinstance(v, str)] if isinstance(value, list) else []
 
@@ -212,7 +196,9 @@ def analyze_text(client, transcript, *, project_names, vocabulary):
     user = _user_message(transcript, project_names, vocabulary)
     with ThreadPoolExecutor(1) as pool:
         decided = pool.submit(classify.classify, client, transcript, project_names=project_names)
-        written = _written(_label(client, user, SYSTEM_PROMPT, LABEL_ENTRY))
+        written = _label(client, user, SYSTEM_PROMPT, LABEL_ENTRY, _written)
+        projects = {store.normalize_tag(name) for name in project_names}
+        written["tags"] = [t for t in written["tags"] if t not in projects]  # §3.4: the project is not a tag
         try:
             return written | decided.result() | {"classified_by": "jev"}
         except ModelError as exc:
@@ -227,15 +213,16 @@ def classify_by_chat(client, transcript, *, project_names=(), vocabulary=()):
     project_name}. analyze_text's fallback when Jev fails; eval_categories scores it.
     """
     user = _user_message(transcript, project_names, vocabulary)
-    return _classified(_label(client, user, FALLBACK_PROMPT, LABEL_ENTRY_FALLBACK))
+    return _label(client, user, FALLBACK_PROMPT, LABEL_ENTRY_FALLBACK, _classified)
 
 
-def _label(client, user, system, parameters):
+def _label(client, user, system, parameters, parse):
+    """label_entry, read by `parse`; the client asks once more if `parse` refuses the answer."""
     return client.tool_call(
         system=system, user=user, tool_name="label_entry",
         description="Label one Notch journal entry and write its summary.", parameters=parameters,
         # Labelling wants the single most likely answer, as in tagger.py.
-        temperature=0.0, max_tokens=MAX_TOKENS)
+        temperature=0.0, max_tokens=MAX_TOKENS, parse=parse)
 
 
 def _written(raw):
@@ -258,7 +245,7 @@ def _classified(raw):
     if mood not in MOODS:
         raise ModelRefused("label_entry answered with an unknown mood.")
     fixed = {tag.strip().lower() for tag in _strings(raw.get("fixed_tags"))}
-    match = _json(raw.get("project_match"))
+    match = store.loose_json(raw.get("project_match"))
     match = match if isinstance(match, dict) else {}
     return {
         "categories": [c for c in CATEGORIES if c in fixed],
@@ -346,11 +333,11 @@ def _transcribe(conn, job, *, client, transcode, audio_dir):
     parts = []
     for row in rows:
         with open(os.path.join(audio_dir, row["storage_key"]), "rb") as f:
-            parts.append(client.transcribe(transcode(f.read()), fmt="wav"))
+            parts.append(client.transcribe(transcode(f.read()), fmt="m4a"))
     return " ".join(parts)
 
 
-def run_capture_job(db_path, job_id, *, client, transcode, audio_dir=None):
+def run_capture_job(db_path, job_id, *, client, transcode, audio_dir):
     """
     Run one capture job to 'complete' or 'failed'. queued -> transcribing -> analyzing ->
     complete, each step one transaction over the job and its entry.
@@ -358,9 +345,8 @@ def run_capture_job(db_path, job_id, *, client, transcode, audio_dir=None):
     A job that is already complete or failed, or no longer exists, is left alone, so a
     second submit costs nothing. A job resumed after a crash starts again, but skips
     transcription when the entry already has its raw_text. Audio is read from
-    `<audio_dir>/<storage_key>`; audio_dir defaults to config.AUDIO_DIR at call time.
+    `<audio_dir>/<storage_key>`.
     """
-    audio_dir = audio_dir or config.AUDIO_DIR
     conn = store.connect(db_path)
     try:
         job = conn.execute("SELECT id, user_id, entry_id, state FROM capture_jobs WHERE id = ?",
@@ -375,10 +361,10 @@ def run_capture_job(db_path, job_id, *, client, transcode, audio_dir=None):
                                       (entry_id, user_id)).fetchone()["raw_text"]
             if transcript is None:
                 transcript = _transcribe(conn, job, client=client, transcode=transcode, audio_dir=audio_dir)
-            # The transcript is kept even if the analysis then fails.
+            # The transcript, and the word count derived from it, are kept even if the analysis then fails.
             with conn:
-                conn.execute("UPDATE entries SET raw_text = coalesce(raw_text, ?) WHERE id = ? AND user_id = ?",
-                             (transcript, entry_id, user_id))
+                conn.execute("UPDATE entries SET raw_text = coalesce(raw_text, ?), word_count = ? "
+                             "WHERE id = ? AND user_id = ?", (transcript, len(transcript.split()), entry_id, user_id))
                 _transition(conn, job, "analyzing")
             project_names, vocabulary = user_context(conn, user_id)
             result = analyze_text(client, transcript, project_names=project_names, vocabulary=vocabulary)

@@ -16,7 +16,8 @@ from notch_api import contract, store
 from notch_api.config import DEV_USER_ID as DEV
 from notch_api.fakes import FakeClient
 from notch_api.openrouter import ModelUnavailable
-from notch_api.reports import ReportError, accept_report, momentum, run_report_job
+from notch_api.reports import accept_report, momentum, run_report_job
+from notch_api.store import ApiError
 
 OTHER = "00000000-0000-4000-8000-000000000002"
 
@@ -33,7 +34,7 @@ def _counts(dates, start, end):
 
 
 def _refused(conn, req, user_id=DEV):
-    with pytest.raises(ReportError) as err:
+    with pytest.raises(ApiError) as err:
         accept_report(conn, user_id, req)
     return err.value.code, err.value.status
 
@@ -77,6 +78,11 @@ def test_month_buckets_hold_month_ends_and_roll_over_the_year():
     dates = ["2026-11-30", "2026-12-31", "2027-01-01", "2027-02-28"]
     assert _counts(dates, "2026-11-15", "2027-03-31") == ("month", [
         ("2026-11-01", 1), ("2026-12-01", 1), ("2027-01-01", 1), ("2027-02-01", 1), ("2027-03-01", 0)])
+
+
+@pytest.mark.parametrize("start, last", [("9999-12-01", "9999-12-31"), ("9999-01-01", "9999-12-01")])  # day, month
+def test_momentum_stops_at_the_last_bucket_a_date_can_hold(start, last):
+    assert _counts(["9999-12-31"], start, "9999-12-31")[1][-1] == (last, 1)
 
 
 # ---------------------------------------------------------------------------
@@ -224,7 +230,7 @@ def test_the_job_writes_a_valid_document_and_drops_invented_ids(conn, db_path, f
 def test_messy_model_output_is_repaired_before_it_is_stored(conn, db_path, accepted):
     report_id, job_id = accepted
     client = FakeClient(overrides={"write_report": {
-        "themes": ["#Shipped", "shipped", "Collaboration", "Big Wins", "q3:okrs", "six", "seven", "eight"],
+        "themes": ["#Shipped", "shipped", "Collaboration", "Big Wins", "Atlas", "q3:okrs", "six", "seven", "eight"],
         # Some providers send a nested array as JSON text.
         "highlights": json.dumps([
             {"title": "Atlas landed", "detail": "demoed", "kind": "milestone", "source_entry_ids": ["e1", "e1", "e9"]},

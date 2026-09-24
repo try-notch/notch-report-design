@@ -12,7 +12,8 @@ whose every number can be checked against the notches the API itself returned.
   1. preflight   ffmpeg and ffprobe, and in live mode the key (never shown).
   2. fixtures    five spoken notches (fixtures/scripts.json). Live mode speaks each
                  script once with OpenRouter TTS and caches it as fixtures/audio/<name>.m4a,
-                 AAC mono 44.1 kHz like the iOS recorder.
+                 AAC mono 44.1 kHz like the iOS recorder, beside <name>.json: the sha256 of
+                 the script, TTS model and voice, so an edited script is spoken again.
   3. seed        the 52 demo notches through the real analysis (notch_api.seed), into
                  a fresh database; category agreement with the hand labels, and how many
                  notches Jev classified (the rest fell back to the chat model), are reported.
@@ -36,6 +37,7 @@ before a live run is worth paying for.
 """
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -184,6 +186,15 @@ def to_m4a(source_args, dest):
     os.replace(partial, dest)
 
 
+def read_json(path):
+    """A small JSON file's contents, or None if it is missing or unreadable."""
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
 def seconds_of(path):
     out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path],
                          capture_output=True, text=True).stdout.strip()
@@ -204,12 +215,17 @@ def fixture_audio(run, client, tmp):
                 to_m4a(["-f", "lavfi", "-i", f"sine=frequency={330 + 110 * i}:duration={TONE_SECONDS}"], path)
             else:
                 path, how = os.path.join(AUDIO_CACHE, f"{name}.m4a"), "cached"
-                if not os.path.exists(path):
+                stamp = os.path.join(AUDIO_CACHE, f"{name}.json")
+                made_from = {"sha256": hashlib.sha256("\n".join(
+                    (fx["script"], config.TTS_MODEL, config.TTS_VOICE)).encode()).hexdigest()}
+                if not os.path.exists(path) or read_json(stamp) != made_from:
                     os.makedirs(AUDIO_CACHE, exist_ok=True)
                     mp3 = os.path.join(tmp, f"{name}.mp3")
                     with open(mp3, "wb") as f:
                         f.write(client.speech(fx["script"], voice=config.TTS_VOICE, fmt="mp3"))
                     to_m4a(["-i", mp3], path)
+                    with open(stamp, "w") as f:
+                        json.dump(made_from, f)
                     how = "generated with TTS"
         except (ModelError, RuntimeError) as exc:
             run.require(f"{name}.m4a", False, str(exc))

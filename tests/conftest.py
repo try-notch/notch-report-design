@@ -3,10 +3,12 @@ Shared fixtures. Every test runs offline: the OpenRouter key is removed from the
 environment and httpx's real network transport refuses to send, so a test that
 forgets to inject a fake fails loudly instead of spending money.
 
-Factories (`add_user`, `add_project`, `add_entry`) insert rows straight into the
-schema through the `conn` fixture and commit, so the rows are visible to any other
-connection on the same file (the app's, a job's).
+Factories (`add_user`, `add_project`, `add_entry`, `capture`) insert rows straight
+into the schema through the `conn` fixture and commit, so the rows are visible to any
+other connection on the same file (the app's, a job's).
 """
+
+import os
 
 import httpx
 import pytest
@@ -112,6 +114,33 @@ def add_entry(conn):
             conn.execute(f"INSERT INTO entries ({', '.join(row)}) VALUES ({', '.join('?' * len(row))})",
                          list(row.values()))
         return entry_id
+    return add
+
+
+@pytest.fixture
+def capture(conn, audio_dir):
+    """
+    capture(entry_id, audio, state="queued") -> job_id. What app.py leaves behind after a
+    202: a pending entry, its capture job, an audio_objects row and the file at
+    <audio_dir>/<storage_key>. state="failed" leaves the job and the entry failed
+    model_unavailable instead.
+    """
+    def add(entry_id, audio, state="queued"):
+        job_id, key = store.new_id(), f"{DEV}/{entry_id}/000"
+        code = "model_unavailable" if state == "failed" else None
+        with conn:
+            conn.execute("INSERT INTO entries (id, user_id, recorded_at, duration_seconds, analysis_state, "
+                         "analysis_failure_code) VALUES (?, ?, '2026-09-21T17:30:00Z', 24, ?, ?)",
+                         (entry_id, DEV, "failed" if code else "pending", code))
+            conn.execute("INSERT INTO capture_jobs (id, user_id, entry_id, state, failure_code) VALUES (?, ?, ?, ?, ?)",
+                         (job_id, DEV, entry_id, state, code))
+            conn.execute("INSERT INTO audio_objects (id, user_id, capture_job_id, entry_id, storage_key, byte_size)"
+                         " VALUES (?, ?, ?, ?, ?, ?)", (store.new_id(), DEV, job_id, entry_id, key, len(audio)))
+        path = os.path.join(audio_dir, key)
+        os.makedirs(os.path.dirname(path))
+        with open(path, "wb") as f:
+            f.write(audio)
+        return job_id
     return add
 
 

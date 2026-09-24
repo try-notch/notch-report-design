@@ -7,9 +7,10 @@ here before it leaves, so a shape the phone cannot decode is a loud 500
 `contract_violation` in our logs rather than a silent decode failure on a device.
 
 EVERY NON-2xx IS THE ERROR ENVELOPE, {"error": {code, message, retryable}}: our own
-refusals (ApiError, reports.ReportError), Starlette's 404/405 for unknown routes, a
-malformed multipart body, FastAPI's validation errors and anything unexpected. The
-client switches on `code`, so no response may fall back to FastAPI's {"detail": ...}.
+refusals (store.ApiError, raised here and in reports.py), Starlette's 404/405 for
+unknown routes, a malformed multipart body, FastAPI's validation errors and anything
+unexpected. The client switches on `code`, so no response may fall back to FastAPI's
+{"detail": ...}.
 
 AUTH IS STUBBED: `Bearer dev` is the dev user and anything else is 401. No route
 takes a user id; every query is scoped to the token's user, and a record owned by
@@ -25,11 +26,11 @@ and the meta part get a little room on top.
 
 import json
 import logging
-import math
 import os
 import re
 import shutil
 import sqlite3
+import sys
 import tempfile
 from contextlib import asynccontextmanager
 
@@ -41,6 +42,7 @@ from starlette.datastructures import UploadFile
 from starlette.exceptions import HTTPException
 
 from . import audio, config, contract, reports, store, worker
+from .store import ApiError
 
 log = logging.getLogger(__name__)
 
@@ -63,15 +65,6 @@ _FAILURE_MESSAGES = {
 
 _HTTP_CODES = {400: "invalid_request", 401: "unauthorized", 404: "not_found",
                405: "method_not_allowed", 413: "payload_too_large"}
-
-
-class ApiError(Exception):
-    """A refusal with its envelope `code` and HTTP `status`. Same shape as reports.ReportError."""
-    retryable = False
-
-    def __init__(self, code, status, message):
-        super().__init__(message)
-        self.code, self.status, self.message = code, status, message
 
 
 def _bad(message):
@@ -127,7 +120,7 @@ async def _json_body(request: Request, _=Depends(_user)):
     """The JSON body, read only after auth passes. Its shape is the route's to check."""
     try:
         return await _capped(request, JSON_BODY_LIMIT).json()
-    except ValueError:
+    except (ValueError, RecursionError):
         raise _bad("The body must be JSON.") from None
 
 
@@ -135,7 +128,7 @@ def _parse_meta(raw):
     """The `meta` part -> the recording facts, checked. A span that disagrees with the mode is invalid_span."""
     try:
         meta = json.loads(raw)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, RecursionError):
         meta = None
     if not isinstance(meta, dict):
         raise _bad("meta must be a JSON object.")
@@ -144,9 +137,10 @@ def _parse_meta(raw):
         raise _bad("meta.id must be 1-128 letters, digits, '-' or '_'.")
     try:
         recorded_at = store.iso(store.parse_instant(meta.get("recorded_at")))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         raise _bad("meta.recorded_at must be an ISO 8601 instant with a zone.") from None
-    if isinstance(duration, bool) or not isinstance(duration, (int, float)) or not 0 <= duration < math.inf:
+    # The upper bound also keeps out a JSON integer too big for float().
+    if isinstance(duration, bool) or not isinstance(duration, (int, float)) or not 0 <= duration <= sys.float_info.max:
         raise _bad("meta.duration_seconds must be a number >= 0.")
     if mode not in ("daily", "catch_up"):
         raise _bad("meta.mode must be daily or catch_up.")
@@ -179,7 +173,7 @@ def _existing_capture_job(conn, user_id, entry_id):
 # ---------------------------------------------------------------------------
 
 def create_app(*, db_path=config.DB_PATH, audio_dir=config.AUDIO_DIR, client=None,
-               transcode=audio.to_wav_16k, inline_jobs=False):
+               transcode=audio.to_m4a_16k, inline_jobs=False):
     @asynccontextmanager
     async def lifespan(app):
         os.makedirs(audio_dir, exist_ok=True)
@@ -210,7 +204,6 @@ def create_app(*, db_path=config.DB_PATH, audio_dir=config.AUDIO_DIR, client=Non
     # -- errors: one envelope for every non-2xx --------------------------------
 
     @app.exception_handler(ApiError)
-    @app.exception_handler(reports.ReportError)
     async def refused(request, exc):
         headers = {"WWW-Authenticate": "Bearer"} if exc.status == 401 else None
         return _envelope(exc.status, exc.code, exc.message, exc.retryable, headers)
@@ -244,8 +237,15 @@ def create_app(*, db_path=config.DB_PATH, audio_dir=config.AUDIO_DIR, client=Non
 
     @app.post("/v1/entries")
     async def create_entry(request: Request, user: str = Depends(_user)):
-        form = await _capped(request, config.MAX_UPLOAD_BYTES + FORM_SLACK).form(
-            max_files=2, max_fields=16, max_part_size=FORM_SLACK)
+        try:
+            form = await _capped(request, config.MAX_UPLOAD_BYTES + FORM_SLACK).form(
+                max_files=2, max_fields=16, max_part_size=FORM_SLACK)
+        except HTTPException as exc:
+            # Starlette reads a part with no filename= as a text field, capped at FORM_SLACK.
+            if "exceeded maximum size" not in str(exc.detail):
+                raise
+            raise _bad("A text part is over 64 KB. Send audio as a file part: its Content-Disposition "
+                       "needs filename=.") from None
         try:
             upload, meta = form.get("audio"), form.get("meta")
             if not isinstance(upload, UploadFile):

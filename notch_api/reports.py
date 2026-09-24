@@ -11,41 +11,30 @@ never does any.
                   row, beside a queued report_jobs row, in one transaction. A report
                   is a frozen artifact (§3.7): a notch deleted later moves nothing.
   run_report_job  the worker. One forced tool call writes the prose against a FACTS
-                  block built from those frozen numbers, so any number in the prose
-                  is one already on the page.
+                  block built from those frozen numbers, and may state a number only
+                  as FACTS or a notch states it, never one it worked out.
 
 The model's answer is repaired, not trusted: a highlight may cite only notches this
 report counted, so an invented id is dropped here rather than rendered as a dead link.
 """
 
-import json
 import logging
 import sqlite3
 from collections import Counter
 from datetime import date, timedelta
 
 import llm
-import seed_db
 
 from . import store
+from .classify import CATEGORIES  # the five: context for the writer, never labels
 from .openrouter import ModelError, ModelRefused
 
 log = logging.getLogger(__name__)
 
 REPORT_TYPES = ("week", "month", "quarter", "year", "custom")
 HIGHLIGHT_KINDS = ("milestone", "shipped", "collaboration", "note")
-CATEGORIES = tuple(seed_db.TAGS)  # the five: stated as facts in the prompt, never as labels
 TRANSCRIPTS_UP_TO = 60            # above this many notches the prompt carries summaries only
 _ADJECTIVE = {"week": "Weekly", "month": "Monthly", "quarter": "Quarterly", "year": "Yearly", "custom": "Custom"}
-
-
-class ReportError(Exception):
-    """A request the API refuses: `code` for the error envelope, `status` for the HTTP answer."""
-    retryable = False
-
-    def __init__(self, code, status, message):
-        super().__init__(message)
-        self.code, self.status, self.message = code, status, message
 
 
 # ---------------------------------------------------------------------------
@@ -66,11 +55,11 @@ def accept_report(conn, user_id, req):
         return req["id"], job_id, False
     if req["project_id"] is not None and not conn.execute(
             "SELECT 1 FROM projects WHERE id = ? AND user_id = ?", (req["project_id"], user_id)).fetchone():
-        raise ReportError("not_found", 404, "No such project.")
+        raise store.ApiError("not_found", 404, "No such project.")
 
     rows = _scope(conn, user_id, req)
     if not rows:
-        raise ReportError("empty_range", 422, "There are no notches in this range to write about.")
+        raise store.ApiError("empty_range", 422, "There are no notches in this range to write about.")
     granularity, buckets = momentum([date.fromisoformat(r["recorded_at"][:10]) for r in rows],
                                     req["range_start"], req["range_end"])
     job_id = store.new_id()
@@ -117,8 +106,11 @@ def momentum(dates, range_start, range_end):
     series, cursor = [], _bucket(range_start, granularity)
     while cursor <= range_end:
         series.append({"date": cursor.isoformat(), "count": counts[cursor]})
-        cursor = (date(cursor.year + cursor.month // 12, cursor.month % 12 + 1, 1) if granularity == "month"
-                  else cursor + timedelta(days=1 if granularity == "day" else 7))
+        try:
+            cursor = (date(cursor.year + cursor.month // 12, cursor.month % 12 + 1, 1) if granularity == "month"
+                      else cursor + timedelta(days=1 if granularity == "day" else 7))
+        except (OverflowError, ValueError):  # no bucket after 9999-12: range_end was in this one
+            break
     return granularity, series
 
 
@@ -141,9 +133,9 @@ def _bucket(d, granularity):
 
 
 def _parse(req):
-    """The request's fields, checked and normalised, else ReportError('invalid_request')."""
+    """The request's fields, checked and normalised, else ApiError('invalid_request')."""
     def bad(message):
-        return ReportError("invalid_request", 400, message)
+        return store.ApiError("invalid_request", 400, message)
 
     if not isinstance(req, dict):
         raise bad("The body must be a JSON object.")
@@ -175,7 +167,7 @@ def _existing_job(conn, user_id, report_id):
     row = conn.execute("SELECT r.user_id, j.id AS job_id FROM reports r "
                        "LEFT JOIN report_jobs j ON j.report_id = r.id WHERE r.id = ?", (report_id,)).fetchone()
     if row and row["user_id"] != user_id:
-        raise ReportError("conflict", 409, "This report id is already in use.")
+        raise store.ApiError("conflict", 409, "This report id is already in use.")
     return row["job_id"] if row else None
 
 
@@ -223,26 +215,33 @@ review.
 {_borrowed_rules()}
 
 THE DOCUMENT
-- headline: a short, evocative title for the period, at most 7 words, no colon. For example
-  "Shipping through the fear". It is not the date range; the app shows that separately.
+- headline: a short, evocative title for the period, at most 7 words, no colon, built from a
+  specific event or phrase in these notches. It is not the date range; the app shows that
+  separately.
 - lede: 1-2 sentences on what the period was mostly about.
 - body: 1-3 short paragraphs separated by a blank line. Carry, in this order: what is working;
-  one direction that builds on a strength (the shape above); one piece of work that doesn't
-  usually get counted, if there is one; and a forward frame, something concrete the person
-  might do or say next. Not "keep up the great work".
-- highlights: 2-4 moments worth a card. title is 2-5 words ("Auth migration shipped"); detail is
-  one clause ("the cutover you'd been dreading went clean"); kind is shipped, collaboration or
-  note, or milestone only for a notch marked milestone; source_entry_ids lists the [id ...]
-  values of the notches it rests on, copied exactly.
+  one direction that builds on a strength (the shape above); at most one piece of work that
+  doesn't usually get counted, if there is one; and a forward frame, something concrete the
+  person might do or say next. Not "keep up the great work". Parts may share a paragraph, and
+  are never labelled (no "What's working:").
+- highlights: 2-4 moments worth a card. title is 2-5 words naming the moment; detail is one
+  clause on how it went; kind is shipped, collaboration or note, or milestone only for a notch
+  marked milestone; source_entry_ids lists the [id ...] values of the notches it rests on,
+  copied exactly.
 - themes: 3-5 hashtag-style handles for the period: lowercase, 1-3 words joined by hyphens, no
-  '#'. Prefer handles the notches already carry in their tags.
+  '#'. Prefer handles the notches already carry in their tags. Never a project's name: projects
+  have their own breakdown.
+Word the headline, titles and details from these notches, never from these instructions. Where
+the sections before THE DOCUMENT say otherwise (they pick 1-2 uncounted entries), THE DOCUMENT
+wins.
 
 NUMBERS RULE
-The only numbers you may state are the ones in the FACTS block, copied verbatim. Never compute,
+State a number only as the FACTS block or a notch states it, copied exactly. Never compute,
 round, estimate or total anything. Write no dates: say "early in the week" or "mid-month".
 
-The categories in the FACTS block (wins, collaboration, leadership, growth, challenges) are for
-your understanding. Never use them as labels, headings or themes."""
+The CATEGORY COUNTS block (wins, collaboration, leadership, growth, challenges) is for your
+understanding only. Never name a category or state its count in the prose, and never use one as
+a label, heading or theme."""
 
 WRITE_REPORT = {
     "type": "object",
@@ -303,11 +302,14 @@ def run_report_job(db_path, job_id, *, client):
             user = _user_message(conn, report, entries)
             with conn:
                 _set_job(conn, job_id, "writing")
-            doc = client.tool_call(system=SYSTEM_PROMPT, user=user, tool_name="write_report",
-                                   description="Write the Notch report document for this range.",
-                                   parameters=WRITE_REPORT, temperature=0.3, max_tokens=4000)
-            prose, themes, highlights = _clean(doc, set(store.json_list(report["source_entry_ids"])),
-                                               {e["id"] for e in entries if e["is_milestone"]})
+            report_ids, milestone_ids = (set(store.json_list(report["source_entry_ids"])),
+                                         {e["id"] for e in entries if e["is_milestone"]})
+            projects = {store.normalize_tag(r["name"]) for r in
+                        conn.execute("SELECT name FROM projects WHERE user_id = ?", (report["user_id"],))}
+            prose, themes, highlights = client.tool_call(
+                system=SYSTEM_PROMPT, user=user, tool_name="write_report",
+                description="Write the Notch report document for this range.", parameters=WRITE_REPORT,
+                temperature=0.3, max_tokens=4000, parse=lambda doc: _clean(doc, report_ids, milestone_ids, projects))
             with conn:
                 conn.execute("UPDATE reports SET headline = ?, lede = ?, body = ?, themes = ?, updated_at = ? "
                              "WHERE id = ? AND user_id = ?",
@@ -339,7 +341,7 @@ def _set_job(conn, job_id, state, code=None):
 
 
 def _user_message(conn, report, entries):
-    """Who, what range, the FACTS (the frozen numbers plus per-category counts), then every notch."""
+    """Who, what range, the FACTS (the frozen numbers), the per-category counts, then every notch."""
     user = conn.execute("SELECT display_name, role, industry, years_experience FROM users WHERE id = ?",
                         (report["user_id"],)).fetchone()
     who = ", ".join(filter(None, [user["role"], user["industry"], user["years_experience"]
@@ -364,16 +366,18 @@ def _user_message(conn, report, entries):
         f"{f' ({who})' if who else ''}, covering {report['range_label']}.",
         f"Scope: {' and '.join(scope) or 'every notch in the range'}.",
         "",
-        "FACTS (the only numbers you may state, copied verbatim)",
+        "FACTS (numbers you may state, copied verbatim)",
         f"- notches: {total}",
         f"- projects: {report['project_count']}",
         f"- milestones: {report['milestone_count']}",
         "- project breakdown: " + ("; ".join(f"{p['name']}: {_notches(p['notch_count'])}, {p['share']}%"
                                             for p in store.json_list(report["project_breakdown"])) or "none"),
-        "- by category: " + ("; ".join(f"{c}: {categories[c]} of {_notches(total)}"
-                                       for c in sorted(categories, key=lambda c: (-categories[c], CATEGORIES.index(c))))
-                              or "none"),
         "- recognized by: " + (", ".join(recognitions) or "nobody named"),
+        "",
+        "CATEGORY COUNTS (context only: never name a category or state these counts)",
+        "- " + ("; ".join(f"{c}: {categories[c]} of {_notches(total)}"
+                          for c in sorted(categories, key=lambda c: (-categories[c], CATEGORIES.index(c))))
+                or "none"),
         "",
         f"NOTCHES ({'with transcripts' if transcripts else 'summaries only'})",
     ]
@@ -401,11 +405,7 @@ def _notches(n):
 
 def _list(value):
     """A list from the model, which sometimes sends a nested array as JSON text instead."""
-    if isinstance(value, str):
-        try:
-            value = json.loads(value)
-        except ValueError:
-            return []
+    value = store.loose_json(value)
     return value if isinstance(value, list) else []
 
 
@@ -413,19 +413,19 @@ def _text(value):
     return value.strip() if isinstance(value, str) else ""
 
 
-def _clean(doc, report_ids, milestone_ids):
+def _clean(doc, report_ids, milestone_ids, projects):
     """
     The model's document, made safe to store -> (prose, themes, highlights).
 
     Missing prose is a refusal: there is nothing honest to render. Everything else is
-    repaired: themes normalised, category names dropped, at most five; a highlight's ids
+    repaired: themes normalised, category and project names dropped, at most five; a highlight's ids
     cut to the notches this report counted; an unknown kind, or `milestone` resting on
     no milestone notch, becomes `note` (the app draws a milestone with the Tree's badge).
     """
     prose = {key: _text(doc.get(key)) for key in ("headline", "lede", "body")}
     if not all(prose.values()):
         raise ModelRefused(f"write_report left {', '.join(k for k, v in prose.items() if not v)} empty.")
-    themes = [t for t in store.normalize_tags(_list(doc.get("themes"))) if t not in CATEGORIES][:5]
+    themes = [t for t in store.normalize_tags(_list(doc.get("themes"))) if t not in CATEGORIES and t not in projects][:5]
     highlights = []
     for h in _list(doc.get("highlights")):
         if not isinstance(h, dict) or not _text(h.get("title")):
