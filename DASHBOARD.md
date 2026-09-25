@@ -183,7 +183,7 @@ This example is illustrative. It shows one notch in flight, one written and one 
       "requests_total": 53,  // cloudflared_tunnel_total_requests since cloudflared started
       "request_errors": 0,  // cloudflared_tunnel_request_errors
       "host": "absolutely-innovations-candles-staff.trycloudflare.com",  // live public host, no scheme: user_hostnames_counts, else the tunnel log
-      "phone_host": "absolutely-innovations-candles-staff.trycloudflare.com",  // X-Forwarded-Host of the phone's newest request
+      "phone_host": "absolutely-innovations-candles-staff.trycloudflare.com",  // X-Forwarded-Host of the phone's newest request, however old
       "probe": {  // GET https://<host>/<secret>/healthz
         "at": 1790368690.2,
         "ok": true,  // 200 and body {"ok": true}
@@ -439,7 +439,7 @@ A source counts as *available* when its `state` is `ok` and it has a value young
 | `checks.phone.device` | devicectl is off or unavailable, or the UDID isn't listed |
 | `checks.tunnel.ready_connections` … `request_errors`, `read_at` | cloudflared metrics are unavailable (`read_at` is null only if it was never read) |
 | `checks.tunnel.host` | neither the metrics nor the tunnel log gives a quick-tunnel host |
-| `checks.tunnel.phone_host` | no phone request in 24 h, or the Caddy log is unavailable |
+| `checks.tunnel.phone_host` | no phone request in the Caddy log the dashboard has read (the current file since it started, not the rolled ones), or the Caddy log is unavailable |
 | `checks.tunnel.probe` | no secret, no host, not run yet, or older than 60 s |
 | `checks.gate.integrity` | no host, not run yet, or older than 5 min |
 | `checks.gate.blocked_*`, `passed_without_secret_10m` | the Caddy log is unavailable |
@@ -496,6 +496,7 @@ A source counts as *available* when its `state` is `ok` and it has a value young
   - **Gate leak:** a passed request whose uri is not under `/<gate>/` counts toward `passed_without_secret_10m`.
   - **Traffic:** traffic is passed gate requests plus every `api.notch.localhost` request. The dashboard's own probes are dropped everywhere, by the rule under Public probes.
   - **The phone:** a passed request whose user agent starts with `Notch/`.
+  - **`phone_host`** is the `X-Forwarded-Host` of the newest phone request the Caddy reader has seen, kept past the 24 h window (`logs.CaddyLog`). After a quick tunnel restarts, the phone keeps calling the old address and none of those calls reach Caddy, so its last good request only gets older. Taken from the 24 h window, `phone_host` went null a day later and the tunnel went back to Fine while the phone build still pointed at a dead address.
   - **Route normalization:**
     1. Drop the `/<gate>` prefix and the query string.
     2. Replace a segment with `{id}` when it is a UUID, all digits, or 16 or more characters of `[0-9A-Fa-f-]`.

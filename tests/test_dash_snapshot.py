@@ -285,6 +285,15 @@ def test_a_flood_of_blocked_probes_never_pushes_the_phone_out_of_the_window(tmp_
     assert snap["traffic"]["by_source_1h"]["gate"] == 1 and snap["blocked"]["count_24h"] == 3
 
 
+def test_the_tunnel_stays_moved_after_the_phone_last_got_through_over_a_day_ago(tmp_path):
+    log = tmp_path / "caddy.log"  # the phone's build still has the old address, so nothing newer arrives
+    log.write_text(caddy("/<gate>/v1/me", ts=NOW - 25 * 3600, **{"X-Forwarded-Host": "old-name.trycloudflare.com"}) + "\n")
+    checks = serve(handler=handler, caddy_log=str(log), tunnel_metrics="127.0.0.1:20241").get("api/snapshot").json()[
+        "checks"]
+    assert (checks["tunnel"]["status"], checks["tunnel"]["phone_host"]) == ("warn", "old-name.trycloudflare.com")
+    assert checks["phone"]["status"] == "unknown"  # not seen in 24 h
+
+
 @pytest.mark.parametrize("configured", [False, True], ids=["off", "unreachable"])
 def test_every_optional_source_missing_still_answers_200_with_the_same_shape(tmp_path, configured):
     missing = str(tmp_path / "nothing-here")

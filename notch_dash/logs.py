@@ -74,6 +74,27 @@ def parse_caddy(line, *_):
                _text(headers.get("cf-connecting-ip"), 64))
 
 
+def is_phone(req):
+    """A request the phone made: it went through the gate, from the Notch app."""
+    return req.kind == "passed" and req.ua.startswith("Notch/")
+
+
+class CaddyLog:
+    """
+    parse_caddy, remembering the host the phone last came in by however long ago it was:
+    the phone's build has that address baked in, so it can't come in by a newer one.
+    """
+
+    def __init__(self):
+        self.phone_host = None
+
+    def feed(self, line, *_):
+        req = parse_caddy(line)
+        if req and is_phone(req) and req.host:
+            self.phone_host = req.host
+        return req
+
+
 def parse_metric(line, *_):
     """One NOTCH_METRICS line (notch_api/metrics.py) -> Call, or None."""
     try:

@@ -9,7 +9,7 @@ import math
 import time
 from collections import Counter, defaultdict
 
-from .logs import GATE, Call, Err, group_errors, redact
+from .logs import GATE, Call, Err, group_errors, is_phone, redact
 from .record import UNFINISHED
 
 VERSION = 1
@@ -413,8 +413,7 @@ def build(src, db, now, started=None):
 
     reqs, calls = window("caddy_log", src.caddy), window("metrics", src.metrics)
     logged, tunnel_errors = window("server_log", src.server_log), window("tunnel_log", src.tunnel_log)
-    phone = None if reqs is None else [r for r in reqs if r.kind == "passed" and r.ua.startswith("Notch/")]
-    newest = max(phone, key=lambda r: r.at) if phone else None
+    phone = None if reqs is None else [r for r in reqs if is_phone(r)]
     host = src.host(now)
     probe, integrity, device = src.e2e.current(now), src.integrity.current(now), src.device.current(now)
     server = server_check(src.health.value, src.health.read_at, now, port=src.settings.notch_port,
@@ -425,7 +424,8 @@ def build(src, db, now, started=None):
         "tunnel": tunnel_check(src.cloudflared.current(now), cf_state=sources["tunnel_metrics"]["state"],
                                where=src.settings.tunnel_metrics, read_at=src.cloudflared.read_at,
                                probe=probe and {"at": _r3(src.e2e.read_at), **probe}, host=host,
-                               phone_host=newest and newest.host, server_status=server["status"]),
+                               phone_host=src.caddy_parser.phone_host if reqs is not None else None,
+                               server_status=server["status"]),
         "gate": gate_check(integrity and {"at": _r3(src.integrity.read_at), **integrity}, host=host, reqs=reqs,
                            now=now),
         "server": server,

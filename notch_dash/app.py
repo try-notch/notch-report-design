@@ -47,7 +47,7 @@ class Sources:
     def __init__(self, settings, *, http, run, clock):
         s, self.settings, self.clock = settings, settings, clock
         self.watched_at = self.db_read_at = self.db_error = None
-        self.server_parser, self.tunnel_parser = logs.ServerLog(), logs.TunnelLog()
+        self.caddy_parser, self.server_parser, self.tunnel_parser = logs.CaddyLog(), logs.ServerLog(), logs.TunnelLog()
 
         def tail(path, parse, interval, maxlen=None, part=lambda item: None):
             return Tail(path, parse, interval=interval, maxlen=maxlen, part=part, clock=clock)
@@ -55,7 +55,7 @@ class Sources:
         def poll(fn, interval, max_age, watched_only=False):
             return Poller(fn, interval=interval, max_age=max_age, watched_only=watched_only, clock=clock)
 
-        self.caddy = tail(s.caddy_log, logs.parse_caddy, 2, CADDY_KEEP, lambda req: req.kind)
+        self.caddy = tail(s.caddy_log, self.caddy_parser.feed, 2, CADDY_KEEP, lambda req: req.kind)
         self.metrics = tail(s.metrics, logs.parse_metric, 2, 20_000)
         self.server_log = tail(s.server_log, self.server_parser.feed, 2, LOG_KEEP, type)
         self.tunnel_log = tail(s.tunnel_log, self.tunnel_parser.feed, 5, LOG_KEEP)
