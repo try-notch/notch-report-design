@@ -604,8 +604,9 @@ For each check, the backend evaluates the rules top to bottom, and the first mat
   - request or response bodies, transcripts or prompts
 - **The snapshot is an allow-list:** the snapshot builder writes new dicts field by field and never passes a source's raw JSON through.
 - **`redact(s)`** runs on every string that came from a log, a header, a path or an exception:
-  - `[0-9a-fA-F]{48,}` → `<gate>`
+  - 48 or more hex digits in a row → `<gate>`, where a digit may also be percent-escaped (`%30`–`%39`, `%41`–`%46`, `%61`–`%66`)
   - (the literal secret is never loaded outside the probe; a valid secret is exactly 48 lowercase hex, so the rule above already covers it)
+  - **Why escapes and upper case:** Caddy's path matcher unescapes the path and ignores case, so `/%61bc…/healthz` and `/ABC…/healthz` both pass the gate. Its log filter, `^/[0-9a-f]{48}`, matches neither, so it logs them raw. Checked on a throwaway Caddy with a stand-in secret. Only a client that holds the secret sends these forms.
   - `Bearer\s+\S+` → `Bearer <redacted>`
   - `sk-or-[\w-]+` → `<key>`
   - Then it truncates: paths and user agents to 200 characters, messages to 300, samples to 4 KB.

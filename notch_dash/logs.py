@@ -26,7 +26,7 @@ Err = namedtuple("Err", "at level where message lines")  # `lines` grows while a
 
 _KEY = re.compile(r"sk-or-[\w-]+")
 _BEARER = re.compile(r"Bearer\s+\S+")
-_HEX = re.compile(r"[0-9a-fA-F]{48,}")  # the gate secret's shape
+_HEX = re.compile(r"(?:[0-9a-fA-F]|%3[0-9]|%4[1-6]|%6[1-6]){48,}")  # the gate secret, any hex digit escaped or not
 _ID = re.compile(r"\d+|[0-9A-Fa-f-]{16,}")
 _VARYING = re.compile(r"[0-9A-Fa-f-]{16,}|\d+(?:\.\d+)?")
 

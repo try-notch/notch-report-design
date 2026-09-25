@@ -42,6 +42,11 @@ def test_redact_hides_the_secret_keys_and_bearer_tokens_and_bounds_the_length():
     assert len(logs.redact("x" * 1000, limit=200)) <= 200
 
 
+def test_redact_hides_a_secret_with_escaped_characters_which_caddy_unescapes_and_lets_through():
+    escaped = "%33%66" + SECRET[2] + "%41" + SECRET[4:]  # 3, f and an upper-case A, each escaped
+    assert logs.redact(f"GET /{escaped}/healthz") == "GET /<gate>/healthz"
+
+
 @pytest.mark.parametrize("line, kind", [
     (caddy("/<gate>/v1/me"), "passed"),
     (caddy("/<gate>/v1/me", status=404, via=False), "blocked"),  # a wrong secret, which Caddy also logs as /<gate>/
