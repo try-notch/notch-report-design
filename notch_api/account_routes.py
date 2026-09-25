@@ -14,8 +14,9 @@ Monday whatever the locale, as Calendar.mondayFirst does on the phone.
 THE RESET IS THE NEW-USER STATE. There is no real auth, so "delete my account" empties
 the one dev user instead of removing it: stored audio first (audio_objects is the only
 record of where it is), then every row the user owns, then the profile and settings
-columns back to their defaults. The users row stays, so the next capture still has its
-foreign key.
+columns back to their defaults, all under one write lock so a capture landing meanwhile
+is either swept with the rest or kept whole. The users row stays, so the next capture
+still has its foreign key.
 """
 
 from datetime import timedelta
@@ -160,8 +161,11 @@ def register(app, *, db, audio_dir, clock):
 
     @app.delete("/v1/me")
     def reset(user: str = Depends(web.user), conn=Depends(db)):
-        store.remove_audio(conn, audio_dir, user)
         with conn:
+            # One write lock from the sweep's read to the delete's commit: a capture committed before it is
+            # swept whole, one committed after it survives whole, and none can leave a file with no row.
+            conn.execute("BEGIN IMMEDIATE")
+            store.remove_audio(conn, audio_dir, user)
             for table in _OWNED_TABLES:
                 conn.execute(f"DELETE FROM {table} WHERE user_id = ?", (user,))
             conn.execute(f"UPDATE users SET {', '.join(f'{c} = ?' for c in USER_DEFAULTS)}, updated_at = ? "

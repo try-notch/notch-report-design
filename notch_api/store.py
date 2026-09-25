@@ -359,7 +359,9 @@ def remove_audio(conn, audio_dir, user_id, entry_id=None):
     """
     Unlink the stored files of one entry (or all of the user's), and their now-empty
     directories. Rows are the caller's to delete AFTERWARDS: audio_objects is the only
-    record of a storage_key, so deleting rows first would orphan the files (§2.4).
+    record of a storage_key, so deleting rows first would orphan the files (§2.4). A
+    caller whose sweep a concurrent capture could add a key to (the reset) holds the
+    write lock (BEGIN IMMEDIATE) from before this read until that delete commits.
     """
     rows = conn.execute("SELECT storage_key FROM audio_objects WHERE user_id = ? AND (? IS NULL OR entry_id = ?)",
                         (user_id, entry_id, entry_id)).fetchall()

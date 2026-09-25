@@ -64,7 +64,7 @@ and resets the profile and settings to their defaults. The user row stays.
 | `POST /v1/entries/{id}/takeaways` | `{transcript}` → `{takeaways, tags}`. **Writes nothing.** The capture's own writing call (`label_entry` with `analysis.SYSTEM_PROMPT`, the user's projects and tag vocabulary), cleaned the same way; an answer with no takeaway is refused. `503 model_unavailable` (retryable) or `502 model_refused`. |
 | `GET /v1/stats?tz=` | `{streak, total, record_total, branches, this_week, goal, days}` over **complete** notches, on days in `tz`, else `users.time_zone`. `streak`: consecutive days ending today or yesterday, else 0. `this_week`: since Monday 00:00. `total`/`branches`: notches/milestones this calendar year (the tree window, register S3). `record_total`: all time. `days`: 91 booleans, the last today. A `tz` that is not an IANA name is `400`. |
 | `GET /v1/me` · `PATCH /v1/me` | `{id, display_name, email: null, role, industry, years_experience, settings: {weekly_goal, reminder: {enabled, hour, minute, weekdays}, notify_week_recap, notify_report_finished, time_zone}}`. PATCH takes any subset, `settings` and `reminder` partial too; validates (goal 0 or 2–7, hour 0–23, minute 0–59, weekdays 0–6 Sunday-first, an IANA zone); a blank text field clears it; `id`/`email` are read-only; answers the whole object. |
-| `DELETE /v1/me` | `{deleted: true}`: the development reset above. |
+| `DELETE /v1/me` | `{deleted: true}`: the development reset above, under one write lock from the audio sweep to the row delete, so a capture landing meanwhile is either swept with the rest or kept whole (never a file with no row). |
 
 Not built: `reanalyse`, filters and delta sync on the entry list (`key`, `sort`, `from`/`to`,
 `updated_since`, the `deletions` table), `If-Unmodified-Since`, search, devices. Every
@@ -144,7 +144,7 @@ Python function every connection registers; `users.reminder_weekdays` has no sub
 
 | Check | Result |
 | --- | --- |
-| `pytest` (offline) | 278 passed |
+| `pytest` (offline) | 279 passed |
 | `e2e/run_e2e.py --offline` | 145/145 (Sep 25, with the record section) |
 | `e2e/run_e2e.py` (live, three consecutive runs on Sep 24) | 120/120 each, ~2.5 min, ~$0.06 a run — before the record section; not yet re-run with it |
 

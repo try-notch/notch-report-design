@@ -5,10 +5,12 @@ reset that returns the dev user to the new-user state.
 """
 
 import os
+import threading
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from notch_api import store
 from notch_api.config import DEV_USER_ID as DEV
 from notch_api.fakes import TEXT_MARKER
 from tests.wire import ok, refused
@@ -146,3 +148,25 @@ def test_the_reset_empties_the_record_and_restores_the_new_user_state(api, conn,
     assert left == 2  # only the other user's project and notch
     assert not os.path.exists(os.path.join(audio_dir, DEV))
     ok(api.post("/v1/projects", json={"id": "p2", "name": "Atlas"}), 201, "project")  # the user row is still there
+
+
+def test_a_capture_landing_during_the_reset_keeps_its_audio_and_its_rows_together(api, conn, audio_dir, monkeypatch):
+    sweep, answers = store.remove_audio, []
+    meta = ('{"id": "e1", "recorded_at": "2026-09-21T17:30:00Z", "duration_seconds": 5, "mode": "daily", '
+            '"catch_up_span": null}')
+    upload = threading.Thread(target=lambda: answers.append(api.post(
+        "/v1/entries", data={"meta": meta}, files={"audio": ("n.m4a", TEXT_MARKER + b"Shipped it.", "audio/mp4")})))
+
+    def sweep_then_upload(*args, **kwargs):
+        sweep(*args, **kwargs)  # the reset has read and unlinked every stored file: now a capture arrives
+        upload.start()
+        upload.join(timeout=0.5)  # time enough to commit, if the reset lets it in before its own delete
+
+    monkeypatch.setattr(store, "remove_audio", sweep_then_upload)
+    ok(api.delete("/v1/me"), 200, "deleted")
+    upload.join()
+    ok(answers[0], 202, "entry_accepted")
+    stored = {os.path.relpath(os.path.join(folder, name), audio_dir)
+              for folder, _, names in os.walk(audio_dir) for name in names}
+    # The capture landed after the reset, so it survives whole: its file and the row that records it.
+    assert stored == {r[0] for r in conn.execute("SELECT storage_key FROM audio_objects")} == {f"{DEV}/e1/000"}
