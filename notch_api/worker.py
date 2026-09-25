@@ -19,7 +19,7 @@ queues work without OPENROUTER_API_KEY, and a job that then needs a model fails
 import logging
 from concurrent.futures import ThreadPoolExecutor
 
-from . import analysis, reports, store
+from . import analysis, metrics, reports, store
 from .openrouter import ModelUnavailable, OpenRouterClient
 
 log = logging.getLogger(__name__)
@@ -40,17 +40,41 @@ class LazyClient:
         return getattr(self._client, name)
 
 
+class _JobClient:
+    """
+    The model client, tagging each call with its job for metrics.py. The tag is set around
+    the call itself, so it holds on any thread this object is handed to (analysis.py asks
+    Jev on a pool of its own) and never outlives the call on a reused worker thread.
+    """
+
+    def __init__(self, client, tags):
+        self._client, self._tags = client, tags
+
+    def __getattr__(self, name):
+        attr = getattr(self._client, name)
+        if not callable(attr):
+            return attr
+
+        def tagged(*args, **kwargs):
+            token = metrics.job.set(self._tags)
+            try:
+                return attr(*args, **kwargs)
+            finally:
+                metrics.job.reset(token)
+        return tagged
+
+
 class JobRunner:
     def __init__(self, db_path, *, client, transcode, audio_dir, workers=4, inline=False):
         self.db_path, self.client, self.transcode, self.audio_dir = db_path, client, transcode, audio_dir
         self._pool = None if inline else ThreadPoolExecutor(workers, thread_name_prefix="notch-job")
 
     def submit_capture(self, job_id):
-        self._run(analysis.run_capture_job, job_id, client=self.client, transcode=self.transcode,
-                  audio_dir=self.audio_dir)
+        client = _JobClient(self.client, {"job": "capture", "job_id": job_id})
+        self._run(analysis.run_capture_job, job_id, client=client, transcode=self.transcode, audio_dir=self.audio_dir)
 
     def submit_report(self, job_id):
-        self._run(reports.run_report_job, job_id, client=self.client)
+        self._run(reports.run_report_job, job_id, client=_JobClient(self.client, {"job": "report", "job_id": job_id}))
 
     def resume_pending(self):
         """Re-submit every job a previous process left unfinished, oldest first. Returns how many."""
