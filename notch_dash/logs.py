@@ -174,10 +174,15 @@ def group_errors(errors, limit=20):
     for e in errors:
         exception = _exception(e.lines)
         key = (e.level, e.where, _VARYING.sub("#", e.message), exception and exception.split(":", 1)[0])
-        group = groups.setdefault(key, {"level": e.level, "where": e.where, "count": 0, "first_at": e.at})
+        group = groups.setdefault(key, {"count": 0, "first_at": e.at, "newest": e, "exception": exception})
         group["count"] += 1
         group["first_at"] = min(group["first_at"], e.at)
-        if e.at >= group.get("last_at", e.at):
-            group |= {"message": e.message, "exception": exception, "last_at": e.at, "sample": _sample(e.lines)}
-    newest = sorted(groups.values(), key=lambda g: -g["last_at"])[:limit]
-    return [g | {"first_at": round(g["first_at"], 3), "last_at": round(g["last_at"], 3)} for g in newest]
+        if e.at >= group["newest"].at:
+            group |= {"newest": e, "exception": exception}
+    out = []
+    for g in sorted(groups.values(), key=lambda g: -g["newest"].at)[:limit]:
+        e = g["newest"]  # its sample is built once here, however many times the error came
+        out.append({"level": e.level, "where": e.where, "message": e.message, "exception": g["exception"],
+                    "count": g["count"], "first_at": round(g["first_at"], 3), "last_at": round(e.at, 3),
+                    "sample": _sample(e.lines)})
+    return out

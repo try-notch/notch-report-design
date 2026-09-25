@@ -66,8 +66,8 @@ A **Poller** is one daemon thread that calls one function on a fixed interval an
 |---|---|---|---|---|---|
 | Caddy access log | tail | 2 s | – | – | 24 h of parsed requests, ≤ 20 000 each of passed, blocked and local |
 | Metrics JSONL | tail | 2 s | – | – | 24 h of call events (≤ 20 000), indexed by `job_id` |
-| Server log | tail | 2 s | – | – | 24 h of error groups, httpx model lines, and the last "resumed" line |
-| Tunnel log | tail | 5 s | – | – | the latest `https://*.trycloudflare.com`, and 24 h of WRN/ERR groups |
+| Server log | tail | 2 s | – | – | 24 h of errors and of httpx model lines (≤ 5 000 of each), and the last "resumed" line |
+| Tunnel log | tail | 5 s | – | – | the latest `https://*.trycloudflare.com`, and 24 h of WRN/ERR lines (≤ 5 000) |
 | Local `GET 127.0.0.1:<NOTCH_PORT>/healthz` | poller | 2 s | 2 s | 10 s | the latest result, including failures |
 | cloudflared `/ready` + `/metrics` | poller | 5 s | 2 s | 30 s | the last good read |
 | Public end-to-end probe `GET https://<host>/<secret>/healthz` | poller, watched only | 15 s | 10 s | 60 s | the latest result |
@@ -82,6 +82,7 @@ A **Poller** is one daemon thread that calls one function on a fixed interval an
 - If the inode changes or the file gets shorter (rotation or truncation), it reopens the file from byte 0.
 - On start it reads the whole current file and keeps only the last 24 h. Rotated backups are ignored.
 - Each kind of item has its own bounded window, so a flood of one kind can't push out another. Caddy's blocked probes come from the internet at whatever rate a prober likes; in one shared window, 50 000 of them pushed the phone's requests out, and with them `phone_host`, the gate traffic and any leak in the last 10 min. A count such as `blocked_24h` stops at the window's size.
+- The server and tunnel logs are bounded too. While the origin is unreachable, cloudflared writes one ERR line per incoming request, so a prober sets how fast that log grows; unbounded, 100 000 such lines made a snapshot take 350 ms. Error groups build their sample once per group, so a full window of one error costs about 3 ms.
 
 **Public probes**
 - They send `User-Agent: notch-dash/1 (<token>)`, where the token is 16 random hex characters drawn each run (`logs.OWN_UA`). Only the dashboard and Caddy's 0600 log know it.

@@ -34,6 +34,7 @@ HEADERS = {
 }
 WATCHED_S = 60  # a snapshot served this recently means someone is watching
 CADDY_KEEP = 20_000  # Caddy requests kept of each kind, so the internet's probes never push out the phone's
+LOG_KEEP = 5_000  # server and tunnel log items kept of each type: a prober can set how fast cloudflared errs
 ENV = {"db": "NOTCH_DB", "audio_dir": "NOTCH_AUDIO_DIR", "metrics": "NOTCH_METRICS",
        "caddy_log": "NOTCH_DASH_CADDY_LOG", "server_log": "NOTCH_DASH_SERVER_LOG", "tunnel_log": "NOTCH_DASH_TUNNEL_LOG",
        "tunnel_metrics": "NOTCH_DASH_TUNNEL_METRICS", "gate_secret": "NOTCH_DASH_GATE_SECRET_FILE",
@@ -56,8 +57,8 @@ class Sources:
 
         self.caddy = tail(s.caddy_log, logs.parse_caddy, 2, CADDY_KEEP, lambda req: req.kind)
         self.metrics = tail(s.metrics, logs.parse_metric, 2, 20_000)
-        self.server_log = tail(s.server_log, self.server_parser.feed, 2)
-        self.tunnel_log = tail(s.tunnel_log, self.tunnel_parser.feed, 5)
+        self.server_log = tail(s.server_log, self.server_parser.feed, 2, LOG_KEEP, type)
+        self.tunnel_log = tail(s.tunnel_log, self.tunnel_parser.feed, 5, LOG_KEEP)
         self.health = poll(lambda: probes.local_health(http, s.notch_port), 2, 10)
         self.cloudflared = poll(lambda: probes.cloudflared(http, s.tunnel_metrics), 5, 30)
         self.e2e = poll(lambda: probes.end_to_end(http, self.host(clock()), s.gate_secret_file), 15, 60, True)
