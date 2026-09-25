@@ -517,7 +517,10 @@ A source counts as *available* when its `state` is `ok` and it has a value young
 - **Error groups:**
   - **Group key:** level + logger + message, with ids and numbers normalized (after redaction), + the exception type.
   - **Tracebacks:** a traceback belongs to the entry above it. `exception` is its last line.
-  - **Lines without a timestamp** (uvicorn's `ERROR:    …`) take the time of the previous timestamped line, or the time they were read.
+  - **Lines without a timestamp** (uvicorn's `ERROR:    …`):
+    - read while following the file (the tail has reached its end before), they take the time they were read, which is within one tick of when they were written;
+    - read while catching up on what the file held when the dashboard opened it, they take the time of the previous timestamped line, or the time they were read when there is none.
+    - Why: only model calls, startup and worker warnings write a timestamped line, so the last one can be hours old. A 500 happening now used to show as hours old, or vanish once that line was 24 h old.
   - **`sample`:** the newest occurrence, ≤ 40 lines and ≤ 4 KB.
   - **Tunnel log:** only lines of the form `<ISO>Z WRN|ERR <message> key=value…` are read. `message` drops the key=value fields.
 

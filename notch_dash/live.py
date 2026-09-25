@@ -30,8 +30,10 @@ def describe(exc):
 
 class Tail:
     """
-    Follows `path`, turning each complete line into an item with `parse(line, now)` (None
-    skips it). It keeps the file open between ticks; when the name points at a new file (a
+    Follows `path`, turning each complete line into an item with `parse(line, now, following)`
+    (None skips it). `following` is False while it catches up on what the file held when it
+    was opened, True once it has reached the end: a line read then was written since the last
+    tick, so `now` dates it to within `interval`. It keeps the file open between ticks; when the name points at a new file (a
     roll) it finishes the old one first, and when the file gets shorter it starts again from
     byte 0. It keeps the last 24 h of items: at most `maxlen` of each `part(item)`, so a flood
     of one kind never pushes out another.
@@ -40,7 +42,7 @@ class Tail:
     def __init__(self, path, parse, *, interval, maxlen=None, part=lambda item: None, clock=time.time):
         self.path, self.parse, self.part, self.interval, self.clock = path, parse, part, interval, clock
         self._parts, self._lock = defaultdict(lambda: deque(maxlen=maxlen)), threading.Lock()
-        self._file, self._rest = None, b""
+        self._file, self._rest, self._following = None, b"", False
         self.read_at = self.error = None
 
     def _read(self):
@@ -59,7 +61,7 @@ class Tail:
 
     def tick(self):
         try:
-            rolled, data = self._read()
+            following, (rolled, data) = self._following, self._read()
             lines = []
             if rolled is not None:  # its whole lines; a partial last one has no end to wait for
                 *lines, _ = (self._rest + rolled).split(b"\n")
@@ -69,12 +71,13 @@ class Tail:
             now = self.clock()
             with self._lock:
                 for line in lines:
-                    item = self.parse(line.decode("utf-8", "replace").rstrip("\r"), now)
+                    item = self.parse(line.decode("utf-8", "replace").rstrip("\r"), now, following)
                     if item is not None:
                         self._parts[self.part(item)].append(item)
                 for items in self._parts.values():
                     while items and items[0].at < now - DAY:
                         items.popleft()
+            self._following = len(data) < CHUNK
         except Exception as exc:
             self.error = describe(exc)
         else:

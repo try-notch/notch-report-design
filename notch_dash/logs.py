@@ -48,7 +48,7 @@ def route(method, uri):
     return redact(f"{method} " + "/".join("{id}" if _ID.fullmatch(part) else part for part in path.split("/")), 200)
 
 
-def parse_caddy(line, now=None):
+def parse_caddy(line, *_):
     """One access-log line -> Req, or None for other hosts, this run's own probes and junk."""
     try:
         entry = json.loads(line)
@@ -74,7 +74,7 @@ def parse_caddy(line, now=None):
                _text(headers.get("cf-connecting-ip"), 64))
 
 
-def parse_metric(line, now=None):
+def parse_metric(line, *_):
     """One NOTCH_METRICS line (notch_api/metrics.py) -> Call, or None."""
     try:
         e = json.loads(line)
@@ -101,14 +101,16 @@ LEVELS = ("WARNING", "ERROR", "CRITICAL")
 class ServerLog:
     """
     notch_api's stdout and stderr. feed() yields model calls (httpx's request lines) and
-    errors; a traceback extends the error above it, and a line with no time of its own takes
-    the last one seen. `started_at` is the last "resumed N unfinished job(s)".
+    errors; a traceback extends the error above it. A line with no time of its own (uvicorn's)
+    is dated `now` when it was read while following the file, else it takes the last time seen:
+    a stamped line can be hours old, since only model calls and startup write one.
+    `started_at` is the last "resumed N unfinished job(s)".
     """
 
     def __init__(self):
         self.started_at = self._last_at = self._open = None
 
-    def feed(self, line, now):
+    def feed(self, line, now, following=False):
         if m := _STAMPED.match(line):
             at = datetime.strptime(m[1], "%Y-%m-%d %H:%M:%S").timestamp() + int(m[2]) / 1000  # local time
             level, where, message = m[3], m[4], m[5]
@@ -121,7 +123,8 @@ class ServerLog:
             return self._error(at, level, where, message, line) if level in LEVELS else None
         if m := _BARE.match(line):
             self._open = None
-            return self._error(self._last_at or now, m[1], "uvicorn.error", m[2], line) if m[1] in LEVELS else None
+            at = now if following else self._last_at or now
+            return self._error(at, m[1], "uvicorn.error", m[2], line) if m[1] in LEVELS else None
         if self._open is not None and len(self._open.lines) < 400:
             self._open.lines.append(redact(line, 1000))
         return None
@@ -143,7 +146,7 @@ class TunnelLog:
     def __init__(self):
         self.host = None
 
-    def feed(self, line, now):
+    def feed(self, line, *_):
         if " INF " in line and (m := _URL.search(line)) and m[1] != "api.trycloudflare.com":
             self.host = m[1]
         elif m := _TUNNEL.match(line):

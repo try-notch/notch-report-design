@@ -127,13 +127,27 @@ def test_the_server_log_gives_model_calls_the_last_start_and_errors_grouped_with
     assert len(groups) == 3
     asgi = by_where["ERROR", "uvicorn.error"]
     assert asgi["count"] == 2 and asgi["exception"] == "sqlite3.OperationalError: database is locked"
-    # uvicorn's lines carry no time: each takes the last timestamped line's.
+    # uvicorn's lines carry no time: in a backlog, each takes the last timestamped line's.
     assert (asgi["first_at"], asgi["last_at"]) == (local("2026-09-25 16:36:00,000"), local("2026-09-25 16:37:00,000"))
     assert asgi["sample"].splitlines()[-1] == asgi["exception"] and "line 160" in asgi["sample"]
     assert "GET /v1/me" not in asgi["sample"]  # the access line after a traceback ends it
     assert by_where["WARNING", "notch_api.analysis"]["count"] == 2  # ids and numbers don't split a group
     assert by_where["WARNING", "notch_api.analysis"]["exception"] is None
     assert groups[0]["last_at"] >= groups[1]["last_at"] >= groups[2]["last_at"]
+
+
+def test_a_timeless_error_takes_the_last_stamp_in_the_backlog_but_the_time_it_was_read_once_followed(tmp_path):
+    path, stamped = tmp_path / "server.log", local("2026-09-25 16:37:00,000")
+    now = [stamped + 5 * 3600]  # no stamped line for five hours: nothing called a model
+    path.write_text("2026-09-25 16:37:00,000 INFO notch_api.app: resumed 0 unfinished job(s)\n"
+                    "ERROR:    Exception in ASGI application\n")
+    tail = Tail(str(path), logs.ServerLog().feed, interval=2, clock=lambda: now[0])
+    tail.tick()
+    now[0] += 2
+    with open(path, "a") as f:
+        f.write("ERROR:    Exception in ASGI application\nTraceback (most recent call last):\nValueError: x\n")
+    tail.tick()
+    assert [e.at for e in tail.items() if isinstance(e, logs.Err)] == [stamped, now[0]]
 
 
 def test_the_tunnel_log_gives_the_public_host_and_its_warnings_without_their_fields():
@@ -158,7 +172,7 @@ Line = namedtuple("Line", "at text")
 def test_tail_follows_appends_rotation_and_truncation_and_keeps_a_day(tmp_path):
     path, now = tmp_path / "access.log", [1000.0]
     path.write_text("a1\na2\npart")
-    tail = Tail(str(path), lambda text, at: Line(at, text), interval=2, clock=lambda: now[0])
+    tail = Tail(str(path), lambda text, at, following: Line(at, text), interval=2, clock=lambda: now[0])
     texts = lambda: [line.text for line in tail.items()]
 
     tail.tick()
