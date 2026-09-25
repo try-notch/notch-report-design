@@ -31,6 +31,7 @@ _ID = {"type": "string", "minLength": 1}
 _COUNT = {"type": "integer", "minimum": 0}
 _MOODS = ["up", "flat", "down"]
 _REPORT_TYPES = ["week", "month", "quarter", "year", "custom"]
+_GOAL = {"enum": [0, 2, 3, 4, 5, 6, 7]}  # 0 is "No goal"; 1 is absent by design
 
 # The closed failure-code set a failed job may carry (§5 "Error envelope").
 JOB_FAILURE_CODES = ["transcription_failed", "model_refused", "model_unavailable", "audio_unreadable"]
@@ -135,8 +136,46 @@ _REPORT = _object({
     "themes": {"type": "array", "items": _TAG},
 })
 
+_STATS = _object({
+    "streak": _COUNT, "total": _COUNT, "record_total": _COUNT, "branches": _COUNT, "this_week": _COUNT,
+    "goal": _GOAL,
+    # The widget's grid: 91 local days, oldest first, the last one today.
+    "days": {"type": "array", "items": {"type": "boolean"}, "minItems": 91, "maxItems": 91},
+})
+
+_ME = _object({
+    "id": _ID,
+    "display_name": _nullable({"type": "string"}),
+    "email": _nullable({"type": "string"}),   # dev auth has no email: always null for now
+    "role": _nullable({"type": "string"}),
+    "industry": _nullable({"type": "string"}),
+    "years_experience": _nullable({"type": "string"}),
+    "settings": _object({
+        "weekly_goal": _GOAL,
+        "reminder": _object({
+            "enabled": {"type": "boolean"},
+            "hour": {"type": "integer", "minimum": 0, "maximum": 23},
+            "minute": {"type": "integer", "minimum": 0, "maximum": 59},
+            "weekdays": {"type": "array", "uniqueItems": True,   # Sunday = 0
+                         "items": {"type": "integer", "minimum": 0, "maximum": 6}},
+        }),
+        "notify_week_recap": {"type": "boolean"},
+        "notify_report_finished": {"type": "boolean"},
+        "time_zone": {"type": "string", "minLength": 1},
+    }),
+})
+
 _DEFS = {
     "entry": _ENTRY,
+    "entry_list": _object({"entries": {"type": "array", "items": {"$ref": "#/$defs/entry"}},
+                           "next_cursor": _nullable({"type": "string", "minLength": 1}),
+                           "matched": _COUNT, "total": _COUNT}),
+    # POST /v1/entries/{id}/takeaways: a whole replacement for the draft, never an empty one.
+    "takeaways": _object({"takeaways": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+                          "tags": {"type": "array", "items": _TAG}}),
+    "stats": _STATS,
+    "me": _ME,
+    "deleted": _object({"deleted": {"const": True}}),
     "entry_accepted": _object({"job_id": _ID, "entry_id": _ID}),
     "report_accepted": _object({"job_id": _ID, "report_id": _ID}),
     "job": _JOB,

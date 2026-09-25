@@ -127,3 +127,36 @@ def test_small_objects():
         validate("project", {"id": "p", "name": "Atlas", "notch_count": 3, "share": 101})
     with pytest.raises(ContractError):
         validate("entry_accepted", {"job_id": "j", "source_entry_ids": ["e"]})  # §5's malformed example
+
+
+STATS = {"streak": 4, "total": 34, "record_total": 412, "branches": 4, "this_week": 4, "goal": 5,
+         "days": [False] * 90 + [True]}
+ME = {"id": "u1", "display_name": "Jordan Kim", "email": None, "role": "Software Engineer",
+      "industry": None, "years_experience": "5",
+      "settings": {"weekly_goal": 5, "reminder": {"enabled": True, "hour": 20, "minute": 30, "weekdays": [1, 2, 3, 4, 5]},
+                   "notify_week_recap": True, "notify_report_finished": True, "time_zone": "Europe/London"}}
+
+
+def test_the_record_and_account_kinds_accept_what_the_routes_send():
+    pending = DOC_ENTRY | {"analysis_state": "pending", "summary": None, "transcript": None, "mood": None,
+                           "word_count": 0, "takeaways": [], "tags": []}
+    validate("entry_list", {"entries": [DOC_ENTRY, pending], "next_cursor": "eyJyIjoi", "matched": 2, "total": 2})
+    validate("entry_list", {"entries": [], "next_cursor": None, "matched": 0, "total": 0})
+    validate("takeaways", {"takeaways": ["A demo you dreaded went clean"], "tags": ["shipped"]})
+    validate("stats", STATS)
+    validate("me", ME)
+    validate("deleted", {"deleted": True})
+
+
+@pytest.mark.parametrize("kind, obj", [
+    ("stats", STATS | {"days": [False] * 90}),                          # the widget grid is exactly 91
+    ("stats", STATS | {"goal": 1}),                                     # 1 is not a goal
+    ("me", ME | {"settings": ME["settings"] | {"reminder": ME["settings"]["reminder"] | {"weekdays": [7]}}}),
+    ("me", ME | {"settings": ME["settings"] | {"reminder": ME["settings"]["reminder"] | {"time": "20:30"}}}),
+    ("takeaways", {"takeaways": [], "tags": []}),                       # a rewrite never empties the draft
+    ("takeaways", {"takeaways": ["x"], "tags": ["#shipped"]}),          # tags travel bare
+    ("entry_list", {"entries": [], "next_cursor": None, "matched": 0}),  # matched and total are both sent
+])
+def test_the_record_and_account_kinds_reject(kind, obj):
+    with pytest.raises(ContractError):
+        validate(kind, obj)

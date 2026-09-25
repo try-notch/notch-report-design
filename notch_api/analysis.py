@@ -196,9 +196,7 @@ def analyze_text(client, transcript, *, project_names, vocabulary):
     user = _user_message(transcript, project_names, vocabulary)
     with ThreadPoolExecutor(1) as pool:
         decided = pool.submit(classify.classify, client, transcript, project_names=project_names)
-        written = _label(client, user, SYSTEM_PROMPT, LABEL_ENTRY, _written)
-        projects = {store.normalize_tag(name) for name in project_names}
-        written["tags"] = [t for t in written["tags"] if t not in projects]  # §3.4: the project is not a tag
+        written = _write(client, user, project_names)
         try:
             return written | decided.result() | {"classified_by": "jev"}
         except ModelError as exc:
@@ -252,6 +250,31 @@ def _classified(raw):
         "mood": mood,
         "project_name": None if match.get("confidence") == "none" else _text(match.get("project_name")),
     }
+
+
+def _write(client, user, project_names, parse=_written):
+    """label_entry's writing, less any tag that is a project's name (§3.4: the project is not a tag)."""
+    written = _label(client, user, SYSTEM_PROMPT, LABEL_ENTRY, parse)
+    projects = {store.normalize_tag(name) for name in project_names}
+    return written | {"tags": [t for t in written["tags"] if t not in projects]}
+
+
+def _rewritten(raw):
+    """_written, refusing an answer with no takeaway: a rewrite must replace the draft whole or not at all."""
+    written = _written(raw)
+    if not written["takeaways"]:
+        raise ModelRefused("label_entry answered without a takeaway.")
+    return written
+
+
+def write_takeaways(client, transcript, *, project_names, vocabulary):
+    """
+    POST /v1/entries/{id}/takeaways: the writing half of analyze_text alone, the same call
+    and the same cleaning, -> {takeaways, tags}. Jev is not asked: nothing it decides is
+    rewritten. Any ModelError propagates, and nothing is written anywhere.
+    """
+    written = _write(client, _user_message(transcript, project_names, vocabulary), project_names, _rewritten)
+    return {"takeaways": written["takeaways"], "tags": written["tags"]}
 
 
 def apply_analysis(conn, user_id, entry_id, transcript, result):

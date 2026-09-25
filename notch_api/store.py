@@ -8,7 +8,8 @@ raw)`, and one place that knows the time format.
 
 TIME. Every instant, in the database and on the wire, is UTC at second precision:
 'YYYY-MM-DDTHH:MM:SSZ'. Strings in that one shape sort and compare correctly as
-text, so SQL can range-filter them without parsing. Dates are 'YYYY-MM-DD'.
+text, so SQL can range-filter them without parsing. Dates are 'YYYY-MM-DD'. A
+notch's DAY is local: its instant read in the user's IANA zone (see "Local days").
 
 IDS. Record ids (entries, projects, reports) are minted by the client and echoed.
 Server handles (jobs, audio objects, highlights) are uuid4 strings from new_id().
@@ -19,7 +20,9 @@ import os
 import re
 import sqlite3
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone
+from functools import lru_cache
+from zoneinfo import ZoneInfo, available_timezones
 
 from . import config
 
@@ -28,11 +31,10 @@ SCHEMA_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schema.s
 
 class ApiError(Exception):
     """A request the API refuses: `code` for the error envelope, `status` for the HTTP answer."""
-    retryable = False
 
-    def __init__(self, code, status, message):
+    def __init__(self, code, status, message, retryable=False):
         super().__init__(message)
-        self.code, self.status, self.message = code, status, message
+        self.code, self.status, self.message, self.retryable = code, status, message, retryable
 
 
 # ---------------------------------------------------------------------------
@@ -77,6 +79,58 @@ def parse_date(s):
 
 def new_id():
     return str(uuid.uuid4())
+
+
+# ---------------------------------------------------------------------------
+# Local days. Stats and report ranges count days in the user's IANA zone: the
+# request's `tz` where a route takes one, else users.time_zone (PATCH /v1/me).
+# ---------------------------------------------------------------------------
+
+@lru_cache(maxsize=1)
+def _zone_names():
+    return frozenset(available_timezones())
+
+
+def zone(name):
+    """An IANA zone name -> ZoneInfo. Anything else (a path, an offset, a typo) is ValueError."""
+    if not isinstance(name, str) or name not in _zone_names():
+        raise ValueError(f"not an IANA time zone: {name!r}")
+    return ZoneInfo(name)
+
+
+def user_zone(conn, user_id):
+    """users.time_zone as a ZoneInfo; UTC if the row is missing or holds a name this machine lacks."""
+    row = conn.execute("SELECT time_zone FROM users WHERE id = ?", (user_id,)).fetchone()
+    try:
+        return zone(row["time_zone"] if row else "UTC")
+    except ValueError:
+        return ZoneInfo("UTC")
+
+
+def local_date(instant, tz):
+    """A stored instant -> its calendar date in `tz` (its UTC date at the far ends of the calendar)."""
+    dt = parse_instant(instant)
+    try:
+        return dt.astimezone(tz).date()
+    except OverflowError:
+        return dt.date()
+
+
+def local_day_bounds(start, end, tz):
+    """
+    Local days start..end inclusive -> [lo, hi) as instant strings, so SQL can range-filter
+    the stored text. Midnight is taken as the zone reads it on each day, DST included; a
+    bound past either end of the calendar is left open.
+    """
+    try:
+        lo = iso(datetime.combine(start, time.min, tz))
+    except (OverflowError, ValueError):
+        lo = ""
+    try:
+        hi = iso(datetime.combine(end + timedelta(days=1), time.min, tz))
+    except (OverflowError, ValueError):
+        hi = "~"  # sorts after every instant
+    return lo, hi
 
 
 # ---------------------------------------------------------------------------
@@ -271,19 +325,24 @@ def find_project_id(conn, user_id, name):
     return row["id"] if row else None
 
 
+# One entry's wire row: the entry, its project's name and its audio's retry window.
+ENTRY_SELECT = """
+    SELECT e.*, p.name AS project_name,
+           (SELECT min(a.purge_after) FROM audio_objects a
+             WHERE a.entry_id = e.id AND a.user_id = e.user_id AND a.purged_at IS NULL)
+             AS retryable_until
+    FROM entries e LEFT JOIN projects p ON p.id = e.project_id AND p.user_id = e.user_id
+"""
+
+
+def entry_row_to_wire(row):
+    """A row from ENTRY_SELECT -> the entry object."""
+    return entry_to_wire(row, row["project_name"], row["retryable_until"])
+
+
 def load_entry(conn, user_id, entry_id):
-    row = conn.execute(
-        """
-        SELECT e.*, p.name AS project_name,
-               (SELECT min(a.purge_after) FROM audio_objects a
-                 WHERE a.entry_id = e.id AND a.user_id = e.user_id AND a.purged_at IS NULL)
-                 AS retryable_until
-        FROM entries e LEFT JOIN projects p ON p.id = e.project_id AND p.user_id = e.user_id
-        WHERE e.id = ? AND e.user_id = ?
-        """,
-        (entry_id, user_id),
-    ).fetchone()
-    return entry_to_wire(row, row["project_name"], row["retryable_until"]) if row else None
+    row = conn.execute(ENTRY_SELECT + " WHERE e.id = ? AND e.user_id = ?", (entry_id, user_id)).fetchone()
+    return entry_row_to_wire(row) if row else None
 
 
 def load_report(conn, user_id, report_id):
@@ -294,6 +353,32 @@ def load_report(conn, user_id, report_id):
     highlights = conn.execute("SELECT * FROM report_highlights WHERE report_id = ? AND user_id = ?",
                               (report_id, user_id)).fetchall()
     return report_to_wire(row, highlights)
+
+
+def remove_audio(conn, audio_dir, user_id, entry_id=None):
+    """
+    Unlink the stored files of one entry (or all of the user's), and their now-empty
+    directories. Rows are the caller's to delete AFTERWARDS: audio_objects is the only
+    record of a storage_key, so deleting rows first would orphan the files (§2.4).
+    """
+    rows = conn.execute("SELECT storage_key FROM audio_objects WHERE user_id = ? AND (? IS NULL OR entry_id = ?)",
+                        (user_id, entry_id, entry_id)).fetchall()
+    root = os.path.realpath(audio_dir)
+    for row in rows:
+        path = os.path.realpath(os.path.join(root, row["storage_key"]))
+        if not path.startswith(root + os.sep):
+            continue  # a key that names somewhere else is never followed
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+        folder = os.path.dirname(path)
+        while folder.startswith(root + os.sep):  # <user>/<entry>, then <user>, each only once empty
+            try:
+                os.rmdir(folder)
+            except OSError:
+                break
+            folder = os.path.dirname(folder)
 
 
 def list_projects(conn, user_id):

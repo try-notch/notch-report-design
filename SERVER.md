@@ -28,6 +28,17 @@ on deterministic fakes with no key and no network.
 **Recording from the iOS app:** a Debug build of `notch-ios-dev` pointed at this server
 records real notches through it — `docs/local-backend.md` there has the steps (register L1).
 
+**A brand-new user** is a fresh database with no seed — the app then shows only what you
+record:
+
+```bash
+NOTCH_DB=data/fresh.db .venv/bin/python -m notch_api
+```
+
+`DELETE /v1/me` (the app's "Delete account") returns the dev user to that state on any
+database: it removes the stored audio, every entry, job, project, report and highlight,
+and resets the profile and settings to their defaults. The user row stays.
+
 ```bash
 .venv/bin/python -m notch_api.seed               # the 52 demo transcripts, analysed for real
 .venv/bin/python -m notch_api.eval_categories    # Jev vs the chat model on the hand labels
@@ -46,11 +57,24 @@ records real notches through it — `docs/local-backend.md` there has the steps 
 | `GET /v1/projects` · `POST /v1/projects` | Counts and shares are computed; a create whose name folds onto an existing project returns that project (`200`) instead of a second one. |
 | `POST /v1/reports` | `{id, type, range_start, range_end, range_label, project_id?, tag?}` → `202`. The numbers are counted at acceptance; `422 empty_range` when nothing is in scope. |
 | `GET /v1/reports` · `GET /v1/reports/{id}` | The list (no cursor paging yet) and the report document. |
+| `DELETE /v1/reports/{id}` | `204`; its highlights and job go with it. `404` for a missing or someone else's report. A job still writing finds it gone and stops. |
+| `GET /v1/entries?limit=&cursor=` | `{entries, next_cursor, matched, total}`: every entry in **any** analysis state, newest first by `(recorded_at, id)`. `limit` 1–100, default 100. `cursor` is opaque (base64 of `{"r": recorded_at, "i": id}`), a keyset, so a capture between two page reads shifts nothing. No filters yet, so `matched` = `total` = all the user's entries. |
+| `PATCH /v1/entries/{id}` | Any of `takeaways`, `tags` (bare; normalised; a project's handle or a category name is `400`), `project_id` (`null` unassigns; unknown or someone else's is `404`), `transcript` (becomes the correction, re-derives `word_count`, never re-analyses; blank is `400`), `is_milestone`. An absent key is unchanged; an unknown key is `400`. `409 entry_processing` (retryable) while the entry is pending, transcribing or analysing. Answers the full entry. 1 MB body cap. |
+| `DELETE /v1/entries/{id}` | `204`. Hard delete: the stored audio files first, then the entry, its capture job and audio rows. Reports keep their frozen ids. |
+| `POST /v1/entries/{id}/takeaways` | `{transcript}` → `{takeaways, tags}`. **Writes nothing.** The capture's own writing call (`label_entry` with `analysis.SYSTEM_PROMPT`, the user's projects and tag vocabulary), cleaned the same way; an answer with no takeaway is refused. `503 model_unavailable` (retryable) or `502 model_refused`. |
+| `GET /v1/stats?tz=` | `{streak, total, record_total, branches, this_week, goal, days}` over **complete** notches, on days in `tz`, else `users.time_zone`. `streak`: consecutive days ending today or yesterday, else 0. `this_week`: since Monday 00:00. `total`/`branches`: notches/milestones this calendar year (the tree window, register S3). `record_total`: all time. `days`: 91 booleans, the last today. A `tz` that is not an IANA name is `400`. |
+| `GET /v1/me` · `PATCH /v1/me` | `{id, display_name, email: null, role, industry, years_experience, settings: {weekly_goal, reminder: {enabled, hour, minute, weekdays}, notify_week_recap, notify_report_finished, time_zone}}`. PATCH takes any subset, `settings` and `reminder` partial too; validates (goal 0 or 2–7, hour 0–23, minute 0–59, weekdays 0–6 Sunday-first, an IANA zone); a blank text field clears it; `id`/`email` are read-only; answers the whole object. |
+| `DELETE /v1/me` | `{deleted: true}`: the development reset above. |
 
-Not built: `reanalyse`, the entry list and delta sync, `PATCH`/`DELETE` on entries and
-reports, `takeaways`, search, stats, `/v1/me`, devices. Every response is validated
-against a JSON Schema of its §5 object before it is sent (`notch_api/contract.py`), and
-every error uses the envelope `{"error": {code, message, retryable}}`.
+Not built: `reanalyse`, filters and delta sync on the entry list (`key`, `sort`, `from`/`to`,
+`updated_since`, the `deletions` table), `If-Unmodified-Since`, search, devices. Every
+response is validated against a JSON Schema of its §5 object before it is sent
+(`notch_api/contract.py`), and every error uses the envelope
+`{"error": {code, message, retryable}}`.
+
+**Days are the user's.** Stats and report ranges (their scope and momentum buckets) count a
+notch on its `recorded_at` read in the user's IANA zone: `users.time_zone`, which the app
+keeps current with `PATCH /v1/me`, unless a stats request passes `tz`. A new user is `UTC`.
 
 ## Which model does what
 
@@ -107,14 +131,22 @@ Python function every connection registers; `users.reminder_weekdays` has no sub
 - Entry ids are `[A-Za-z0-9_-]{1,128}`, because an id becomes part of the stored audio's path.
 - Report ranges are inclusive, so `range_end >= range_start` (a one-day report has start = end).
 - The seven-day audio window is recorded (`audio_objects.purge_after`) but nothing sweeps it yet.
+- `users.reminder_enabled` defaults to off, as the app does until onboarding turns it on.
+- An edit to a notch still being analysed is refused (`409`), because the analysis would
+  overwrite it when it lands; a failed notch can be edited.
+- `PATCH /v1/entries` answers an unknown project with `404` (the doc says `409`), the same
+  as `POST /v1/reports` does.
+- `GET /v1/stats` without `tz` uses `users.time_zone` (§3.1), not UTC (§5 contradicts it).
+- The entry list returns every analysis state (§3.3); stats, projects and reports count
+  complete notches only.
 
 ## Verification
 
 | Check | Result |
 | --- | --- |
-| `pytest` (offline) | 217 passed |
-| `e2e/run_e2e.py --offline` | 111/111 |
-| `e2e/run_e2e.py` (live, three consecutive runs on Sep 24) | 120/120 each, ~2.5 min, ~$0.06 a run |
+| `pytest` (offline) | 278 passed |
+| `e2e/run_e2e.py --offline` | 145/145 (Sep 25, with the record section) |
+| `e2e/run_e2e.py` (live, three consecutive runs on Sep 24) | 120/120 each, ~2.5 min, ~$0.06 a run — before the record section; not yet re-run with it |
 
 The live run seeds the 52 demo transcripts through Jev and DeepSeek, uploads five spoken
 recordings (one a three-day catch-up) and polls each to completion, writes a week, a
@@ -122,7 +154,11 @@ month, a project-scoped and a tag-scoped report, and checks every body against t
 contract — plus idempotent re-posts, the refusals (401, 404, 400 `invalid_span`,
 413, 422), report arithmetic (counts, contiguous momentum, floored shares, highlight ids
 drawn only from the report's notches), and that the right project, recognition and impact
-come back for each recording. Everything it sent and received is kept under
+come back for each recording. Its last section, "record", walks the routes behind the
+app's live screens: every page of the entry list, `/v1/me` edited, stats recomputed from
+the entries in Pacific/Auckland and in UTC, an entry edited and its takeaways rewritten
+(writing nothing), a report discarded, the entry deleted with its audio, and finally
+`DELETE /v1/me` leaving every list empty and the settings at their defaults. Everything it sent and received is kept under
 `e2e/runs/<stamp>/`; one entry and one report from the last saved run are committed in
 [`e2e/sample/`](e2e/sample/).
 
@@ -139,4 +175,7 @@ confirmed ones are in the "Harden the server after a four-lens review" commit.
   being split.
 - Custom report ranges have no length cap (§13 leaves custom ranges open).
 - Everything the iOS document lists and the route table above does not: auth, Postgres
-  with row-level security, Storage and its purge, push, search, stats, account endpoints.
+  with row-level security, Storage and its purge, push, search, reanalyse, delta sync,
+  export and a real account deletion (the reset above keeps the one dev user).
+- A fixed-offset zone name such as `GMT+0530` is refused as a `tz` or `time_zone`; only
+  IANA names are accepted.

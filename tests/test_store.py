@@ -68,6 +68,21 @@ def test_parse_date_rejects_every_other_shape(bad):
         store.parse_date(bad)
 
 
+@pytest.mark.parametrize("start, end, bounds", [
+    ("2026-03-08", "2026-03-08", ("2026-03-08T08:00:00Z", "2026-03-09T07:00:00Z")),  # a 23-hour day: DST starts
+    ("9999-12-31", "9999-12-31", ("9999-12-31T08:00:00Z", "~")),                    # no midnight after it: open
+])
+def test_local_day_bounds_are_the_zones_midnights(start, end, bounds):
+    tz = store.zone("America/Los_Angeles")
+    assert store.local_day_bounds(store.parse_date(start), store.parse_date(end), tz) == bounds
+
+
+@pytest.mark.parametrize("name", ["", "GMT+2", "../../etc/passwd", "Mars/Olympus", None])
+def test_zone_takes_iana_names_only(name):
+    with pytest.raises(ValueError):
+        store.zone(name)
+
+
 def test_iso_treats_naive_as_utc():
     assert store.iso(datetime(2026, 5, 11, 8, 42)) == "2026-05-11T08:42:00Z"
     assert store.iso(datetime(2026, 5, 11, 8, 42, tzinfo=timezone.utc)) == "2026-05-11T08:42:00Z"

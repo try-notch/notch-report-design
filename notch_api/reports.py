@@ -57,10 +57,11 @@ def accept_report(conn, user_id, req):
             "SELECT 1 FROM projects WHERE id = ? AND user_id = ?", (req["project_id"], user_id)).fetchone():
         raise store.ApiError("not_found", 404, "No such project.")
 
-    rows = _scope(conn, user_id, req)
+    tz = store.user_zone(conn, user_id)
+    rows = _scope(conn, user_id, req, tz)
     if not rows:
         raise store.ApiError("empty_range", 422, "There are no notches in this range to write about.")
-    granularity, buckets = momentum([date.fromisoformat(r["recorded_at"][:10]) for r in rows],
+    granularity, buckets = momentum([store.local_date(r["recorded_at"], tz) for r in rows],
                                     req["range_start"], req["range_end"])
     job_id = store.new_id()
     try:
@@ -171,22 +172,23 @@ def _existing_job(conn, user_id, report_id):
     return row["job_id"] if row else None
 
 
-def _scope(conn, user_id, req):
+def _scope(conn, user_id, req, tz):
     """
-    Complete notches whose UTC day falls in the inclusive range, oldest first, narrowed
-    by the optional project and tag. Instants are stored as 'YYYY-MM-DDTHH:MM:SSZ', so
-    the day bounds compare as text and use the (user_id, recorded_at) index.
+    Complete notches whose day in the user's zone `tz` falls in the inclusive range,
+    oldest first, narrowed by the optional project and tag. Instants are stored as
+    'YYYY-MM-DDTHH:MM:SSZ', so the local day bounds, turned into instants, compare as
+    text and use the (user_id, recorded_at) index.
     """
     rows = conn.execute(
         """
         SELECT e.id, e.recorded_at, e.project_id, e.is_milestone, e.tags, p.name AS project_name
         FROM entries e LEFT JOIN projects p ON p.id = e.project_id AND p.user_id = e.user_id
         WHERE e.user_id = ? AND e.analysis_state = 'complete'
-          AND e.recorded_at BETWEEN ? AND ?
+          AND e.recorded_at >= ? AND e.recorded_at < ?
           AND (? IS NULL OR e.project_id = ?)
         ORDER BY e.recorded_at, e.id
         """,
-        (user_id, f"{req['range_start']}T00:00:00Z", f"{req['range_end']}T23:59:59Z",
+        (user_id, *store.local_day_bounds(req["range_start"], req["range_end"], tz),
          req["project_id"], req["project_id"]),
     ).fetchall()
     # Whole-tag match: a LIKE over the JSON text would let 'flaky' match 'flaky-tests'.
@@ -311,10 +313,11 @@ def run_report_job(db_path, job_id, *, client):
                 description="Write the Notch report document for this range.", parameters=WRITE_REPORT,
                 temperature=0.3, max_tokens=4000, parse=lambda doc: _clean(doc, report_ids, milestone_ids, projects))
             with conn:
-                conn.execute("UPDATE reports SET headline = ?, lede = ?, body = ?, themes = ?, updated_at = ? "
-                             "WHERE id = ? AND user_id = ?",
-                             (prose["headline"], prose["lede"], prose["body"], store.json_dump(themes),
-                              store.now(), report["id"], report["user_id"]))
+                if not conn.execute("UPDATE reports SET headline = ?, lede = ?, body = ?, themes = ?, updated_at = ? "
+                                    "WHERE id = ? AND user_id = ?",
+                                    (prose["headline"], prose["lede"], prose["body"], store.json_dump(themes),
+                                     store.now(), report["id"], report["user_id"])).rowcount:
+                    return  # discarded while the model was writing: nothing left to write into
                 conn.executemany(
                     "INSERT INTO report_highlights (id, report_id, user_id, ordinal, title, detail, kind, "
                     "source_entry_ids) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",

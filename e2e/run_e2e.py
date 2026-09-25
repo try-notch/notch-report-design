@@ -24,6 +24,11 @@ whose every number can be checked against the notches the API itself returned.
   7. reports     week, month, one project and one tag: accepted idempotently, written,
                  and every frozen number checked against the entries.
   8. listings    GET /v1/reports and GET /v1/projects agree with the rest.
+  9. record      the routes behind the app's live screens: every page of GET /v1/entries,
+                 /v1/me read and edited, GET /v1/stats recomputed from the entries in a zone
+                 far from UTC and in UTC, an entry edited (PATCH), its takeaways rewritten
+                 (writing nothing), a report discarded, the entry deleted with its audio,
+                 and finally DELETE /v1/me leaving the user as a brand-new one.
 
 Exit code 0 only when every check passed. The run is recorded under e2e/runs/<UTC stamp>/:
 exchanges.jsonl (every request and response), the final entry and report bodies,
@@ -52,6 +57,7 @@ import traceback
 import uuid
 from collections import Counter
 from datetime import date, datetime, time as clock, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO_ROOT)  # notch_api, and the demo modules it imports (seed_db, llm, ...)
@@ -70,6 +76,7 @@ AUDIO_CACHE = os.path.join(E2E_DIR, "fixtures", "audio")
 RUNS_DIR = os.path.join(E2E_DIR, "runs")
 SAMPLE_DIR = os.path.join(E2E_DIR, "sample")
 JOB_TIMEOUT = 240           # seconds a capture or report job may take
+FAR_ZONE = "Pacific/Auckland"  # stats in a zone where the seed's 17:30 UTC is the next morning
 SPEECH_SECONDS = (20, 60)   # what a spoken fixture should last
 TONE_SECONDS = 2            # the offline stand-in for one
 
@@ -84,6 +91,7 @@ class Run:
     def __init__(self, run_dir, offline):
         self.dir, self.offline = run_dir, offline
         self.checks, self.timings, self.agreement = [], {}, None
+        self.classified_by = None  # counted before the reset empties the database
         self.db_path = os.path.join(run_dir, "notch_api.db")
         self.samples = {}  # what --save-sample copies: the last capture's entry, the week report
         self.section, self.http, self.server = None, None, None
@@ -613,6 +621,166 @@ def listings(run, entries, report_ids):
 
 
 # ---------------------------------------------------------------------------
+# 9. The record: list, stats, /v1/me, edit, rewrite, delete, reset
+# ---------------------------------------------------------------------------
+
+def all_pages(run, limit):
+    """Every page of GET /v1/entries. -> (pages, problem or None)."""
+    pages, cursor = [], None
+    while len(pages) < 1000:
+        params = {"limit": limit} | ({"cursor": cursor} if cursor else {})
+        status, body = run.call("GET", "/v1/entries", params=params, logged=params)
+        p = problem(status, body, 200, "entry_list")
+        if p:
+            return pages, p
+        pages.append(body)
+        cursor = body["next_cursor"]
+        if cursor is None:
+            return pages, None
+    return pages, "still paging after 1000 pages"
+
+
+def expected_stats(entries, tz, goal):
+    """GET /v1/stats worked out again from the entries the API returned, on days in `tz`."""
+    zone = ZoneInfo(tz)
+    today = datetime.now(zone).date()
+    notches = [(datetime.fromisoformat(e["recorded_at"]).astimezone(zone).date(), e["is_milestone"])
+               for e in entries if e["analysis_state"] == "complete"]
+    logged = {day for day, _ in notches}
+    streak, day = 0, today if today in logged else today - timedelta(days=1)
+    while day in logged:
+        streak, day = streak + 1, day - timedelta(days=1)
+    this_year = [milestone for day, milestone in notches if day.year == today.year]
+    return {"streak": streak, "total": len(this_year), "record_total": len(notches), "branches": sum(this_year),
+            "this_week": sum(day >= today - timedelta(days=today.weekday()) for day, _ in notches), "goal": goal,
+            "days": [today - timedelta(days=n) in logged for n in range(90, -1, -1)]}
+
+
+def check_gone(run, path, what):
+    """DELETE `path` answers 204 with no body, then GET and a second DELETE both 404."""
+    status, body = run.call("DELETE", path)
+    run.check(f"DELETE {what} → 204, no body", status == 204 and body == "", f"HTTP {status}: {body}")
+    for method in ("GET", "DELETE"):
+        status, body = run.call(method, path)
+        p = problem(status, body, 404, "error", "not_found")
+        run.check(f"then {method} → 404 not_found", not p, p)
+
+
+def record(run, entries, captured, report_ids, audio_dir):
+    run.heading("record · the entry list")
+    pages, p = all_pages(run, limit=20)
+    listed = [e for page in pages for e in page["entries"]]
+    run.check(f"GET /v1/entries pages 20 at a time to a null cursor ({len(pages)} valid pages)", not p, p)
+    run.check(f"every one of the {len(entries)} entries exactly once, as GET /v1/entries/{{id}} serves it",
+              len(listed) == len(entries) and {e["id"]: e for e in listed} == entries,
+              f"listed {len(listed)}, {len({e['id'] for e in listed})} distinct")
+    keys = [(e["recorded_at"], e["id"]) for e in listed]
+    run.check("newest first by (recorded_at, id)", keys == sorted(keys, reverse=True))
+    run.check(f"matched = total = {len(entries)} on every page",
+              all(page["matched"] == page["total"] == len(entries) for page in pages))
+
+    run.heading("record · /v1/me and stats")
+    status, me = run.call("GET", "/v1/me")
+    p = problem(status, me, 200, "me")
+    if not run.check("GET /v1/me → the seeded profile", not p and me["display_name"] == seeding.PROFILE["display_name"],
+                     p or f"display_name {me['display_name']!r}"):
+        return
+    edit = {"settings": {"time_zone": FAR_ZONE, "weekly_goal": 4, "reminder": {"hour": 9, "weekdays": [1, 3, 5]}}}
+    status, body = run.call("PATCH", "/v1/me", json=edit)
+    want = me | {"settings": me["settings"] | {"time_zone": FAR_ZONE, "weekly_goal": 4, "reminder": me["settings"][
+        "reminder"] | {"hour": 9, "weekdays": [1, 3, 5]}}}
+    p = problem(status, body, 200, "me") or (body != want and f"got {body}")
+    run.check("PATCH /v1/me changes the nested settings it names and keeps the rest", not p, p)
+    status, body = run.call("PATCH", "/v1/me", json={"settings": {"weekly_goal": 1}})
+    p = problem(status, body, 400, "error", "invalid_request")
+    run.check("a weekly goal of 1 → 400 invalid_request", not p, p)
+    status, body = run.call("GET", "/v1/me")
+    run.check("GET /v1/me → the edit, and nothing of the refused one", status == 200 and body == want, str(body))
+
+    for label, params, zone in ((f"the stored zone, {FAR_ZONE}", {}, FAR_ZONE), ("?tz=UTC", {"tz": "UTC"}, "UTC")):
+        status, body = run.call("GET", "/v1/stats", params=params, logged=params)
+        expected = expected_stats(entries.values(), zone, 4)
+        p = problem(status, body, 200, "stats") or (body != expected and
+                                                    f"expected {expected | {'days': sum(expected['days'])}}, "
+                                                    f"got {body | {'days': sum(body['days'])}}")
+        if run.check(f"GET /v1/stats in {label} = the entries' own streak, week, year and 91 days", not p, p):
+            run.note(" · ".join(f"{k} {v}" for k, v in body.items() if k != "days")
+                     + f" · {sum(body['days'])}/91 days lit")
+    status, body = run.call("GET", "/v1/stats", params={"tz": "Mars/Olympus"})
+    p = problem(status, body, 400, "error", "invalid_request")
+    run.check("a tz that is not an IANA zone → 400 invalid_request", not p, p)
+
+    run.heading("record · edit, rewrite, delete")
+    if not run.check("a captured notch to edit", captured):
+        return
+    entry = next(iter(captured.values()))
+    path = f"/v1/entries/{entry['id']}"
+    edit = {"tags": ["#E2E Edited", *entry["tags"][:1]], "takeaways": ["Edited by the E2E run."],
+            "is_milestone": True, "project_id": None}
+    status, body = run.call("PATCH", path, json=edit)
+    want = entry | {"tags": store.normalize_tags(edit["tags"]), "takeaways": edit["takeaways"], "is_milestone": True,
+                    "project_id": None, "project": None}
+    p = problem(status, body, 200, "entry") or (
+        {k: body[k] for k in want if k != "updated_at"} != {k: v for k, v in want.items() if k != "updated_at"}
+        and f"got {body}")
+    run.check("PATCH tags, takeaways, milestone and a null project: those change, nothing else", not p, p)
+    words = "The E2E run corrected this transcript by hand."
+    status, body = run.call("PATCH", path, json={"transcript": words})
+    p = problem(status, body, 200, "entry") or (
+        (body["transcript"], body["word_count"], body["summary"], body["tags"]) != (
+            words, len(words.split()), entry["summary"], want["tags"]) and f"got {body}")
+    run.check("PATCH transcript: the word count follows, nothing is re-analysed", not p, p)
+    edited = body
+    for name, patch, status_code, code in (
+            ("a project's handle as a tag", {"tags": [store.normalize_tag(seed_db.PROJECT_NAME)]}, 400,
+             "invalid_request"),
+            ("an unknown project", {"project_id": new_id()}, 404, "not_found")):
+        status, body = run.call("PATCH", path, json=patch)
+        p = problem(status, body, status_code, "error", code)
+        run.check(f"{name} → {status_code} {code}", not p, p)
+
+    status, body = run.call("POST", f"{path}/takeaways", json={"transcript": entry["transcript"]})
+    p = problem(status, body, 200, "takeaways")
+    if run.check("POST /v1/entries/{id}/takeaways → takeaways and bare tags", not p, p):
+        run.note("rewritten " + " / ".join(body["takeaways"]) + " · " + " ".join("#" + t for t in body["tags"]))
+    status, body = run.call("GET", path)
+    run.check("the rewrite wrote nothing", status == 200 and body == edited, str(body)[:300])
+
+    if report_ids:
+        check_gone(run, f"/v1/reports/{report_ids[0]}", "/v1/reports/{id}")
+        status, body = run.call("GET", "/v1/reports")
+        run.check("GET /v1/reports no longer lists it",
+                  status == 200 and report_ids[0] not in {r["id"] for r in body["reports"]})
+    check_gone(run, path, "/v1/entries/{id}")
+    run.check("its stored audio is gone", not os.path.exists(os.path.join(audio_dir, config.DEV_USER_ID, entry["id"])))
+    status, body = run.call("GET", "/v1/entries", params={"limit": 1})
+    run.check(f"the list total is {len(entries) - 1}", status == 200 and body["total"] == len(entries) - 1,
+              str(body)[:300])
+
+    run.heading("record · reset to a new user")
+    status, body = run.call("DELETE", "/v1/me")
+    p = problem(status, body, 200, "deleted")
+    run.check("DELETE /v1/me → {deleted: true}", not p, p)
+    empty = {"/v1/entries": ("entry_list", {"entries": [], "next_cursor": None, "matched": 0, "total": 0}),
+             "/v1/projects": ("project_list", {"projects": []}),
+             "/v1/reports": ("report_list", {"reports": [], "next_cursor": None})}
+    for route, (kind, want) in empty.items():
+        status, body = run.call("GET", route)
+        p = problem(status, body, 200, kind) or (body != want and f"got {str(body)[:300]}")
+        run.check(f"GET {route} → empty", not p, p)
+    status, body = run.call("GET", "/v1/stats")
+    p = problem(status, body, 200, "stats") or (body != expected_stats([], "UTC", 5) and f"got {body}")
+    run.check("GET /v1/stats → zeros, 91 empty days, the default goal", not p, p)
+    status, body = run.call("GET", "/v1/me")
+    p = problem(status, body, 200, "me") or (
+        (body["display_name"], body["role"], body["settings"]["reminder"]["enabled"], body["settings"]["time_zone"])
+        != (None, None, False, "UTC") and f"got {body}")
+    run.check("GET /v1/me → no profile, the reminder off, UTC", not p, p)
+    user_audio = os.path.join(audio_dir, config.DEV_USER_ID)
+    run.check("no stored audio left", not os.path.exists(user_audio) or not any(os.scandir(user_audio)))
+
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 
@@ -630,7 +798,7 @@ def summarise(run, args):
         timings = " · ".join(f"{k} {v:.1f} s" for k, v in run.timings.items())
         print("\n" + textwrap.fill(timings, width=100, break_on_hyphens=False,
                                   initial_indent="    timings     ", subsequent_indent=" " * 16))
-    by = classifiers(run.db_path)
+    by = run.classified_by if run.classified_by is not None else classifiers(run.db_path)
     if run.agreement:
         agree, total = run.agreement
         models = "fake models" if run.offline else f"{config.JEV_MODEL}, falling back to {config.CHAT_MODEL}"
@@ -677,11 +845,16 @@ def main(argv=None):
             client = preflight(run)
             fixtures = fixture_audio(run, client, tmp)
             results = seed_history(run, client, run.db_path)
-            start_server(run, run.db_path, os.path.join(run.dir, "audio"))
+            audio_dir = os.path.join(run.dir, "audio")
+            start_server(run, run.db_path, audio_dir)
             entries = seeded_over_api(run, results)
-            entries |= capture(run, fixtures, today)
+            captured = capture(run, fixtures, today)
+            entries |= captured
             refusals(run, today)
-            listings(run, entries, write_reports(run, entries, today))
+            report_ids = write_reports(run, entries, today)
+            listings(run, entries, report_ids)
+            run.classified_by = classifiers(run.db_path)
+            record(run, entries, captured, report_ids, audio_dir)
     except Abort:
         pass
     except Exception as exc:  # still summarise, still stop the server

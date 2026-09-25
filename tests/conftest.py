@@ -9,6 +9,7 @@ other connection on the same file (the app's, a job's).
 """
 
 import os
+from datetime import datetime, timezone
 
 import httpx
 import pytest
@@ -144,17 +145,32 @@ def capture(conn, audio_dir):
     return add
 
 
+class Clock:
+    """The app's clock (create_app's `clock`). A test moves it by setting `.now`."""
+
+    def __init__(self):
+        self.now = datetime(2026, 9, 25, 12, 0, tzinfo=timezone.utc)  # a Friday
+
+    def __call__(self):
+        return self.now
+
+
 @pytest.fixture
-def api(db_path, audio_dir, fake_client, fake_transcode):
+def clock():
+    return Clock()
+
+
+@pytest.fixture
+def api(db_path, audio_dir, fake_client, fake_transcode, clock):
     """
-    A TestClient over create_app with the fakes and inline jobs, authenticated as the
-    dev user. Imported lazily: app.py is built after this file.
+    A TestClient over create_app with the fakes, inline jobs and the test's `clock`,
+    authenticated as the dev user. Imported lazily: app.py is built after this file.
     """
     from fastapi.testclient import TestClient
 
     from notch_api.app import create_app
 
     app = create_app(db_path=db_path, audio_dir=audio_dir, client=fake_client,
-                     transcode=fake_transcode, inline_jobs=True)
+                     transcode=fake_transcode, inline_jobs=True, clock=clock)
     with TestClient(app, headers={"Authorization": f"Bearer {config.DEV_TOKEN}"}) as client:
         yield client

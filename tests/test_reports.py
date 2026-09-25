@@ -2,7 +2,8 @@
 reports.py: the numbers frozen at acceptance, and the prose the job writes.
 
 The numbers are what a person quotes at review time, so they are tested at their
-edges: bucket boundaries, floor shares, the UTC day edges of the range. The job is
+edges: bucket boundaries, floor shares, the day edges of the range in the user's own
+zone. The job is
 tested for what it must not let through from the model (invented ids, unnormalised
 themes, a missing headline) and for how it fails.
 """
@@ -113,6 +114,18 @@ def test_accept_freezes_the_numbers_for_complete_notches_on_utc_days_in_range(co
     assert wire["eyebrow"] == "Weekly report · Sep 21 – Sep 27"
     assert wire["headline"] is None and wire["highlights"] == [] and wire["themes"] == []
     assert tuple(_job(conn, job_id)) == ("queued", None, None)
+
+
+def test_the_range_and_its_momentum_are_days_in_the_users_zone(conn, add_entry):
+    with conn:
+        conn.execute("UPDATE users SET time_zone = 'America/Los_Angeles' WHERE id = ?", (DEV,))  # UTC-7
+    add_entry("sun-night", "2026-09-21T06:59:59Z")   # Sun Sep 20 in LA: before the range, though Sep 21 in UTC
+    add_entry("mon-midnight", "2026-09-21T07:00:00Z")  # Mon Sep 21 00:00 in LA: the first second in range
+    add_entry("sun-late", "2026-09-28T06:30:00Z")    # Sun Sep 27 23:30 in LA: the last day, though Sep 28 in UTC
+    add_entry("next-mon", "2026-09-28T07:00:00Z")    # Mon Sep 28 in LA: after the range
+    wire = store.load_report(conn, DEV, accept_report(conn, DEV, _req())[0])
+    assert wire["source_entry_ids"] == ["mon-midnight", "sun-late"]
+    assert [b["count"] for b in wire["momentum"]] == [1, 0, 0, 0, 0, 0, 1]
 
 
 def test_breakdown_floors_shares_over_every_notch_and_orders_by_count_then_name(conn, add_project, add_entry):
@@ -267,6 +280,21 @@ def test_a_finished_job_is_not_written_twice(conn, db_path, fake_client, accepte
     run_report_job(db_path, job_id, client=fake_client)  # e.g. a resume racing a submit
     assert len(fake_client.calls) == 1
     assert len(store.load_report(conn, DEV, report_id)["highlights"]) == 3
+
+
+def test_a_report_discarded_while_the_model_writes_is_left_gone(conn, db_path, accepted, caplog):
+    report_id, job_id = accepted
+
+    class Discarding(FakeClient):
+        def tool_call(self, **kwargs):
+            with conn:  # DELETE /v1/reports/{id} lands mid-call; its job row goes with it
+                conn.execute("DELETE FROM reports WHERE id = ?", (report_id,))
+            return super().tool_call(**kwargs)
+
+    run_report_job(db_path, job_id, client=Discarding())
+    assert conn.execute("SELECT (SELECT count(*) FROM reports) + (SELECT count(*) FROM report_highlights)"
+                        " + (SELECT count(*) FROM report_jobs)").fetchone()[0] == 0
+    assert not [r for r in caplog.records if r.levelname in ("WARNING", "ERROR")]  # no crash logged
 
 
 def test_above_sixty_notches_the_prompt_carries_summaries_only(conn, db_path, fake_client, add_entry):

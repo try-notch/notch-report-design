@@ -13,7 +13,7 @@
 -- STRICT makes SQLite enforce column types the way Postgres would.
 -- Every statement is IF NOT EXISTS: store.init_db() applies this file on every start.
 --
--- Not ported: `deletions` and `device_tokens` (no endpoints in scope), `search_vector`
+-- Not ported: `deletions` and `device_tokens` (no delta sync or push yet), `search_vector`
 -- and the GIN indexes (no search in scope), and the `reminder_weekdays <@ 0..6` CHECK
 -- (SQLite cannot put a subquery in a CHECK).
 
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS users (
   years_experience       TEXT,                         -- register A1
   time_zone              TEXT    NOT NULL DEFAULT 'UTC',
   weekly_goal            INTEGER NOT NULL DEFAULT 5 CHECK (weekly_goal IN (0,2,3,4,5,6,7)),
-  reminder_enabled       INTEGER NOT NULL DEFAULT 1 CHECK (reminder_enabled IN (0,1)),
+  reminder_enabled       INTEGER NOT NULL DEFAULT 0 CHECK (reminder_enabled IN (0,1)),  -- off until onboarding turns it on, as in the app
   reminder_hour          INTEGER NOT NULL DEFAULT 20 CHECK (reminder_hour BETWEEN 0 AND 23),
   reminder_minute        INTEGER NOT NULL DEFAULT 30 CHECK (reminder_minute BETWEEN 0 AND 59),
   reminder_weekdays      TEXT    NOT NULL DEFAULT '[1,2,3,4,5]',   -- Sunday-indexed 0..6
