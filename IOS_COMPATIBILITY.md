@@ -16,6 +16,45 @@ number below is the better of the two.
 
 ---
 
+## Re-measured on `ios-contract` (Sep 24)
+
+This branch adds `notch_api/`, a server built to close the gap below — see
+[SERVER.md](SERVER.md). Same rows, same rules, re-classified from its code; a row
+counts as ✓ in the SQLite port when it has the §3 columns and constraints under
+SQLite's types.
+
+| Surface | Expected | `jeet-dev` ✓ / ◐ / ✗ | `ios-contract` ✓ / ◐ / ✗ |
+| --- | ---: | ---: | ---: |
+| HTTP endpoints (§5) | 21 | 0 / 0 / 21 | **7 / 1 / 13** |
+| Tables (§3) | 10 | 0 / 3 / 7 | **5 / 3 / 2** |
+| `entries` columns (§3.3) | 23 | 3 / 5 / 15 | **22 / 0 / 1** |
+| Capture analysis fields | 9 | 0 / 4 / 5 | **9 / 0 / 0** |
+| Report object fields | 16 | 0 / 10 / 6 | **16 / 0 / 0** |
+| Cross-cutting mechanics | 10 | 0 / 1 / 9 | **6 / 3 / 1** |
+
+- **Endpoints:** the capture and report paths — upload, job poll, entry read,
+  projects list and create, report create, list and read. The list has no cursor
+  paging (◐). Missing: reanalyse, entry list and sync, entry edit and delete,
+  takeaways, search, stats, report delete, `/v1/me` ×3, devices ×2.
+- **Tables:** `users` (no weekday-subset check), `entries` (no `search_vector`; the
+  project foreign key cannot `SET NULL` one column in SQLite) and `reports` (inclusive
+  range check, scope columns) are ◐; `deletions` and `device_tokens` are not built.
+- **Cross-cutting:** client-minted ids, UTC instants, `202`-then-poll jobs, the error
+  envelope, speech-to-text and stored reports are ✓. Auth is a development bearer, not
+  Supabase JWTs; tenancy is enforced by every query and the composite keys, not row-level
+  security; the seven-day audio window is recorded but not swept (◐ each). Push is ✗.
+
+Disagreements 2 and 3 below were settled for this branch: free-form tags go on the wire
+and the five categories stay server-side (now decided by Jev, SERVER.md has the
+measurements); the report prompt fills the iOS fields and folds the other sections into
+`body`. Disagreement 1 (where the record lives) is still open, and still contradicted by
+`Notch.md`. A live end-to-end run — five spoken recordings through Whisper, Jev and
+DeepSeek, and four reports — passes all 120 of its checks.
+
+The measurement below is the `jeet-dev` baseline, unchanged.
+
+---
+
 ## Verdict
 
 **Conceptually close, structurally far.** The iOS design adopts this repo's core
