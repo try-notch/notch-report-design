@@ -21,8 +21,12 @@ echo 'OPENROUTER_API_KEY=sk-or-...' > .env      # one key for every model call
 
 Every `/v1` request needs `Authorization: Bearer dev`. There is one development user; the
 contract's Supabase JWT verification is not built. Environment knobs: `NOTCH_DB`,
-`NOTCH_AUDIO_DIR`, `NOTCH_PORT`, and `NOTCH_FAKE_MODELS=1` to run on deterministic fakes
-with no key and no network.
+`NOTCH_AUDIO_DIR`, `NOTCH_PORT`, `NOTCH_HOST` (default `127.0.0.1`; `0.0.0.0` lets a phone
+on the same Wi-Fi in — and anyone else on that network), and `NOTCH_FAKE_MODELS=1` to run
+on deterministic fakes with no key and no network.
+
+**Recording from the iOS app:** a Debug build of `notch-ios-dev` pointed at this server
+records real notches through it — `docs/local-backend.md` there has the steps (register L1).
 
 ```bash
 .venv/bin/python -m notch_api.seed               # the 52 demo transcripts, analysed for real

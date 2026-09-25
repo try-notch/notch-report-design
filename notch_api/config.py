@@ -36,6 +36,9 @@ PROJECT_CONFIDENCE = 0.5   # below this, a project choice leaves the notch unass
 DB_PATH = os.environ.get("NOTCH_DB") or os.path.join(REPO_ROOT, "data", "notch_api.db")
 AUDIO_DIR = os.environ.get("NOTCH_AUDIO_DIR") or os.path.join(REPO_ROOT, "data", "audio")
 PORT = int(os.environ.get("NOTCH_PORT") or 4131)  # api.notch.localhost via Caddy
+# 127.0.0.1 keeps the development bearer off the network. A phone on the same Wi-Fi
+# needs NOTCH_HOST=0.0.0.0, which opens it to the whole LAN while it runs.
+HOST = os.environ.get("NOTCH_HOST") or "127.0.0.1"
 
 # Auth is stubbed: one bearer token, one user. JWT verification is out of scope.
 DEV_TOKEN = "dev"

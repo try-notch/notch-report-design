@@ -1,9 +1,11 @@
 """
-python -m notch_api — serve the API on 127.0.0.1 (api.notch.localhost through Caddy).
+python -m notch_api — serve the API on 127.0.0.1:4131 (api.notch.localhost through Caddy).
 
 Run it from the repo root: analysis.py and reports.py import the demo's top-level
 modules (prompt_variants, seed_db, llm). The environment chooses everything else:
 
+  NOTCH_HOST         interface, default 127.0.0.1; 0.0.0.0 lets a phone on the same
+                     Wi-Fi reach it (and anyone else on that network)
   NOTCH_PORT         port, default 4131
   NOTCH_DB           SQLite file, default data/notch_api.db
   NOTCH_AUDIO_DIR    stored uploads, default data/audio
@@ -30,7 +32,7 @@ def main():
     app = create_app(db_path=config.DB_PATH, audio_dir=config.AUDIO_DIR,
                      client=FakeClient() if fake else None,
                      transcode=fake_transcode if fake else audio.to_m4a_16k)
-    uvicorn.run(app, host="127.0.0.1", port=config.PORT)
+    uvicorn.run(app, host=config.HOST, port=config.PORT)
 
 
 if __name__ == "__main__":
