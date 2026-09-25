@@ -45,6 +45,18 @@ def test_only_gets_from_an_allowed_host_are_answered():
     assert web.get("/openapi.json", headers={"Host": "dash.notch.localhost"}).status_code == 404
 
 
+@pytest.mark.parametrize("forwarded_for, status", [
+    (None, 200),  # straight to 127.0.0.1:4130
+    ("127.0.0.1", 200),  # through Caddy from this Mac
+    ("192.168.1.20", 403),  # through Caddy's *:80 from another device on the network
+    ("127.0.0.1, 192.168.1.20", 403),  # a forged loopback ahead of the address Caddy saw
+    ("not-an-address", 403),
+], ids=["direct", "caddy-local", "caddy-lan", "forged", "unreadable"])
+def test_only_this_mac_is_answered_even_through_caddy(forwarded_for, status):
+    headers = {"X-Forwarded-For": forwarded_for} if forwarded_for else {}
+    assert client().get("api/snapshot", headers=headers).status_code == status
+
+
 def test_the_page_is_served_from_an_allow_list_and_tolerates_not_being_built(tmp_path, monkeypatch):
     monkeypatch.setattr(dash_app, "STATIC", tmp_path)
     web = client()

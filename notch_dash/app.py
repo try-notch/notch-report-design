@@ -1,12 +1,13 @@
 """
 app.py — the dashboard's HTTP edge and the sources behind it.
 
-GET only, from an allowed Host only, every response uncached under a strict CSP. `/` is the
+GET only, from an allowed Host on this Mac only, every response uncached under a strict CSP. `/` is the
 page, `static/` its two other files (an allow-list), `api/snapshot` the document. Slow
 sources are kept current by background threads (Sources.start); a snapshot request reads
 their caches and runs one bounded read of the record.
 """
 
+import ipaddress
 import logging
 import os
 import pathlib
@@ -141,6 +142,18 @@ def _basename(path):
     return path and os.path.basename(path.rstrip("/"))
 
 
+def _from_this_mac(request):
+    """
+    Caddy listens on *:80 and sets X-Forwarded-For to the address it was reached from,
+    replacing whatever the client sent: anything but loopback there came from another machine.
+    """
+    try:
+        return all(ipaddress.ip_address(ip.strip()).is_loopback
+                   for ip in ",".join(request.headers.getlist("x-forwarded-for") or ["127.0.0.1"]).split(","))
+    except ValueError:
+        return False
+
+
 def _page_file(name):
     path = STATIC / name
     if name not in PAGE_FILES or not path.is_file():
@@ -168,6 +181,8 @@ def create_app(settings, *, http=None, run=subprocess.run, clock=time.time, star
     async def guard(request: Request, call_next):
         if request.headers.get("host") not in settings.allowed_hosts:
             response = PlainTextResponse("Misdirected request.", 421)
+        elif not _from_this_mac(request):
+            response = PlainTextResponse("Only this Mac can see it.", 403)
         elif request.method not in ("GET", "HEAD"):
             response = PlainTextResponse("Read only.", 405, headers={"Allow": "GET, HEAD"})
         else:

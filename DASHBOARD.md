@@ -26,7 +26,7 @@ NOTCH_DASH_GATE_SECRET_FILE=/path/to/gate-secret \
 ```
 
 - **Use absolute paths for `NOTCH_DB` and `NOTCH_AUDIO_DIR`.** The defaults come from `notch_api.config`, which resolves `data/` against the checkout that holds the code. In a worktree, that data isn't the phone's.
-- **Listening:** only on 127.0.0.1, and only for GET and HEAD requests.
+- **Listening:** uvicorn binds 127.0.0.1 only and answers only GET and HEAD. Caddy, in front of it, listens on every interface, so the dashboard also refuses what Caddy forwarded from another machine (see Security).
 - **No new dependencies:** it uses fastapi, uvicorn and httpx from the existing venv.
 
 ## Environment
@@ -585,6 +585,8 @@ For each check, the backend evaluates the rules top to bottom, and the first mat
 
 - **Network:**
   - It binds to 127.0.0.1 only.
+  - **This Mac only, even through Caddy:** Caddy listens on `*:80`, and its `dash.notch.localhost` site has no `bind`, so any device on the same network can reach it by sending that Host to the Mac's LAN address. A request whose `X-Forwarded-For` holds anything but loopback addresses (or can't be read) gets a 403. Caddy sets that header to the address it was reached from and drops a client's own value, so it can't be forged from the network; a request straight to 127.0.0.1:4130 has none.
+  - **Still to do outside this repo:** add `bind 127.0.0.1 [::1]` to the `http://dash.notch.localhost` site in the Caddyfile, and to `http://api.notch.localhost`, which serves the API to the network the same way.
   - **Host allow-list:** `dash.notch.localhost`, `127.0.0.1:<port>` and `localhost:<port>`. Any other Host gets a 421, which defends against DNS rebinding. The allowed hosts are a `Settings` field, so tests can add `testserver`, and a future mount under `/<gate>/dash/` would add `notch-gate.localhost`.
   - Only GET and HEAD are served.
   - `FastAPI(docs_url=None, redoc_url=None, openapi_url=None)`.
