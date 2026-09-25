@@ -64,7 +64,7 @@ A **Poller** is one daemon thread that calls one function on a fixed interval an
 
 | Source | How | Every | Timeout | Max age | Kept |
 |---|---|---|---|---|---|
-| Caddy access log | tail | 2 s | – | – | 24 h of parsed requests (≤ 50 000) |
+| Caddy access log | tail | 2 s | – | – | 24 h of parsed requests, ≤ 20 000 each of passed, blocked and local |
 | Metrics JSONL | tail | 2 s | – | – | 24 h of call events (≤ 20 000), indexed by `job_id` |
 | Server log | tail | 2 s | – | – | 24 h of error groups, httpx model lines, and the last "resumed" line |
 | Tunnel log | tail | 5 s | – | – | the latest `https://*.trycloudflare.com`, and 24 h of WRN/ERR groups |
@@ -81,6 +81,7 @@ A **Poller** is one daemon thread that calls one function on a fixed interval an
 - Each tail remembers its offset and inode.
 - If the inode changes or the file gets shorter (rotation or truncation), it reopens the file from byte 0.
 - On start it reads the whole current file and keeps only the last 24 h. Rotated backups are ignored.
+- Each kind of item has its own bounded window, so a flood of one kind can't push out another. Caddy's blocked probes come from the internet at whatever rate a prober likes; in one shared window, 50 000 of them pushed the phone's requests out, and with them `phone_host`, the gate traffic and any leak in the last 10 min. A count such as `blocked_24h` stops at the window's size.
 
 **Public probes**
 - They send `User-Agent: notch-dash/1 (<token>)`, where the token is 16 random hex characters drawn each run (`logs.OWN_UA`). Only the dashboard and Caddy's 0600 log know it.
@@ -635,7 +636,7 @@ For each check, the backend evaluates the rules top to bottom, and the first mat
 | `__init__.py` | A docstring pointing here. |
 | `__main__.py` | Builds `Settings.from_env()` and runs `uvicorn.run(create_app(settings), host="127.0.0.1", port=settings.port, access_log=False)`. |
 | `settings.py` | A frozen `Settings` dataclass and `from_env(environ)`. This is the only place that reads the environment. Defaults come from `notch_api.config`. |
-| `live.py` | `Tail`: a file follower that tracks offset and inode, handles rotation and truncation, and holds a bounded 24 h deque behind a lock. `Poller`: a daemon thread with an interval, a watched-only flag and `(value, read_at, error)`. Tests call `.tick()` / `.refresh()` directly, with no threads. |
+| `live.py` | `Tail`: a file follower that tracks offset and inode, handles rotation and truncation, and holds bounded 24 h deques behind a lock, one per kind of item. `Poller`: a daemon thread with an interval, a watched-only flag and `(value, read_at, error)`. Tests call `.tick()` / `.refresh()` directly, with no threads. |
 | `logs.py` | Pure parsers for Caddy lines (classify passed/blocked/local/dash, normalize routes), server-log lines (httpx calls, error groups, the "resumed" line), tunnel-log lines (URL, WRN/ERR) and metrics lines. Also `redact`. |
 | `probes.py` | Local `/healthz`; cloudflared `/ready` + `/metrics` (a Prometheus regex for only the lines above); the public end-to-end probe and gate integrity; OpenRouter `/key`; devicectl. Every function takes an injected `httpx.Client` or `run`. |
 | `record.py` | Read-only SQLite: `connect_ro(path)` plus the bounded queries (the last 20 rows with audio presence, unfinished jobs by state and the oldest, 1 h/24 h done/failed, record counts, profile, job_id → entry_id for the capture jobs updated in 24 h, the metrics window, ≤ 2000). One connection per snapshot. |

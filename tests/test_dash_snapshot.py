@@ -275,6 +275,16 @@ def test_models_fall_back_to_the_server_log_until_the_metrics_file_appears(tmp_p
         ("stt", 1, 0, None, None), ("classify", 1, 1, None, None), ("chat", 1, 0, None, None)]
 
 
+def test_a_flood_of_blocked_probes_never_pushes_the_phone_out_of_the_window(tmp_path, monkeypatch):
+    monkeypatch.setattr("notch_dash.app.CADDY_KEEP", 3)
+    log = tmp_path / "caddy.log"
+    log.write_text("\n".join([caddy("/<gate>/v1/me", ts=NOW - 600, **{"X-Forwarded-Host": HOST})] + [
+        caddy(f"/wp-login.php?{i}", status=404, via=False, ua="masscan/1.3", ts=NOW - 300 + i) for i in range(5)]) + "\n")
+    snap = serve(caddy_log=str(log)).get("api/snapshot").json()
+    assert (snap["checks"]["phone"]["status"], snap["checks"]["tunnel"]["phone_host"]) == ("ok", HOST)
+    assert snap["traffic"]["by_source_1h"]["gate"] == 1 and snap["blocked"]["count_24h"] == 3
+
+
 @pytest.mark.parametrize("configured", [False, True], ids=["off", "unreachable"])
 def test_every_optional_source_missing_still_answers_200_with_the_same_shape(tmp_path, configured):
     missing = str(tmp_path / "nothing-here")

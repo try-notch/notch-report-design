@@ -8,7 +8,7 @@ failed, worded for the page. `run` drives either on a daemon thread; tests call 
 import os
 import threading
 import time
-from collections import deque
+from collections import defaultdict, deque
 
 DAY = 86400
 CHUNK = 8 << 20  # the most one tick reads, so a big backlog is taken in steps
@@ -32,12 +32,13 @@ class Tail:
     """
     Follows `path`, turning each complete line into an item with `parse(line, now)` (None
     skips it). It remembers its offset and inode, starts again from byte 0 when the file is
-    replaced or gets shorter, and keeps the last 24 h of items (at most `maxlen`).
+    replaced or gets shorter, and keeps the last 24 h of items: at most `maxlen` of each
+    `part(item)`, so a flood of one kind never pushes out another.
     """
 
-    def __init__(self, path, parse, *, interval, maxlen=None, clock=time.time):
-        self.path, self.parse, self.interval, self.clock = path, parse, interval, clock
-        self._items, self._lock = deque(maxlen=maxlen), threading.Lock()
+    def __init__(self, path, parse, *, interval, maxlen=None, part=lambda item: None, clock=time.time):
+        self.path, self.parse, self.part, self.interval, self.clock = path, parse, part, interval, clock
+        self._parts, self._lock = defaultdict(lambda: deque(maxlen=maxlen)), threading.Lock()
         self._inode, self._offset, self._rest = None, 0, b""
         self.read_at = self.error = None
 
@@ -57,9 +58,10 @@ class Tail:
                 for line in lines:
                     item = self.parse(line.decode("utf-8", "replace").rstrip("\r"), now)
                     if item is not None:
-                        self._items.append(item)
-                while self._items and self._items[0].at < now - DAY:
-                    self._items.popleft()
+                        self._parts[self.part(item)].append(item)
+                for items in self._parts.values():
+                    while items and items[0].at < now - DAY:
+                        items.popleft()
         except Exception as exc:
             self.error = describe(exc)
         else:
@@ -67,7 +69,7 @@ class Tail:
 
     def items(self):
         with self._lock:
-            return list(self._items)
+            return [item for items in self._parts.values() for item in items]
 
 
 class Poller:

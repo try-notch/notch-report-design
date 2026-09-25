@@ -33,6 +33,7 @@ HEADERS = {
                                "connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
 }
 WATCHED_S = 60  # a snapshot served this recently means someone is watching
+CADDY_KEEP = 20_000  # Caddy requests kept of each kind, so the internet's probes never push out the phone's
 ENV = {"db": "NOTCH_DB", "audio_dir": "NOTCH_AUDIO_DIR", "metrics": "NOTCH_METRICS",
        "caddy_log": "NOTCH_DASH_CADDY_LOG", "server_log": "NOTCH_DASH_SERVER_LOG", "tunnel_log": "NOTCH_DASH_TUNNEL_LOG",
        "tunnel_metrics": "NOTCH_DASH_TUNNEL_METRICS", "gate_secret": "NOTCH_DASH_GATE_SECRET_FILE",
@@ -47,13 +48,13 @@ class Sources:
         self.watched_at = self.db_read_at = self.db_error = None
         self.server_parser, self.tunnel_parser = logs.ServerLog(), logs.TunnelLog()
 
-        def tail(path, parse, interval, maxlen=None):
-            return Tail(path, parse, interval=interval, maxlen=maxlen, clock=clock)
+        def tail(path, parse, interval, maxlen=None, part=lambda item: None):
+            return Tail(path, parse, interval=interval, maxlen=maxlen, part=part, clock=clock)
 
         def poll(fn, interval, max_age, watched_only=False):
             return Poller(fn, interval=interval, max_age=max_age, watched_only=watched_only, clock=clock)
 
-        self.caddy = tail(s.caddy_log, logs.parse_caddy, 2, 50_000)
+        self.caddy = tail(s.caddy_log, logs.parse_caddy, 2, CADDY_KEEP, lambda req: req.kind)
         self.metrics = tail(s.metrics, logs.parse_metric, 2, 20_000)
         self.server_log = tail(s.server_log, self.server_parser.feed, 2)
         self.tunnel_log = tail(s.tunnel_log, self.tunnel_parser.feed, 5)
