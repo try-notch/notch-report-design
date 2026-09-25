@@ -24,11 +24,12 @@ whose every number can be checked against the notches the API itself returned.
   7. reports     week, month, one project and one tag: accepted idempotently, written,
                  and every frozen number checked against the entries.
   8. listings    GET /v1/reports and GET /v1/projects agree with the rest.
-  9. record      the routes behind the app's live screens: every page of GET /v1/entries,
-                 /v1/me read and edited, GET /v1/stats recomputed from the entries in a zone
-                 far from UTC and in UTC, an entry edited (PATCH), its takeaways rewritten
-                 (writing nothing), a report discarded, the entry deleted with its audio,
-                 and finally DELETE /v1/me leaving the user as a brand-new one.
+  9. record      the routes behind the app's live screens: every page of GET /v1/entries
+                 (and a cursor nested too deep to parse, refused), /v1/me read and edited,
+                 GET /v1/stats recomputed from the entries in a zone far from UTC and in UTC,
+                 an entry edited (PATCH; a lone-surrogate transcript refused), its takeaways
+                 rewritten (writing nothing), a report discarded, the entry deleted with its
+                 audio, and finally DELETE /v1/me leaving the user as a brand-new one.
 
 Exit code 0 only when every check passed. The run is recorded under e2e/runs/<UTC stamp>/:
 exchanges.jsonl (every request and response), the final entry and report bodies,
@@ -42,6 +43,7 @@ before a live run is worth paying for.
 """
 
 import argparse
+import base64
 import hashlib
 import json
 import os
@@ -678,6 +680,10 @@ def record(run, entries, captured, report_ids, audio_dir):
     run.check("newest first by (recorded_at, id)", keys == sorted(keys, reverse=True))
     run.check(f"matched = total = {len(entries)} on every page",
               all(page["matched"] == page["total"] == len(entries) for page in pages))
+    deep = {"cursor": base64.urlsafe_b64encode(b"[" * 10_000).decode()}  # past the JSON parser's recursion limit
+    status, body = run.call("GET", "/v1/entries", params=deep, logged={"cursor": "10,000 nested ["})
+    p = problem(status, body, 400, "error", "invalid_request")
+    run.check("a cursor nested 10,000 deep → 400 invalid_request", not p, p)
 
     run.heading("record · /v1/me and stats")
     status, me = run.call("GET", "/v1/me")
@@ -738,6 +744,10 @@ def record(run, entries, captured, report_ids, audio_dir):
         status, body = run.call("PATCH", path, json=patch)
         p = problem(status, body, status_code, "error", code)
         run.check(f"{name} → {status_code} {code}", not p, p)
+    lone = '{"transcript": "\\ud800 lone"}'  # valid JSON that no UTF-8 text can hold
+    status, body = run.call("PATCH", path, content=lone.encode(), logged=lone)
+    p = problem(status, body, 400, "error", "invalid_request")
+    run.check("a transcript with a lone surrogate escape → 400 invalid_request", not p, p)
 
     status, body = run.call("POST", f"{path}/takeaways", json={"transcript": entry["transcript"]})
     p = problem(status, body, 200, "takeaways")

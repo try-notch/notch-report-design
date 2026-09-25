@@ -42,11 +42,11 @@ def encode_cursor(row):
 
 
 def decode_cursor(cursor):
-    """A cursor this server minted -> (recorded_at, id), else 400."""
+    """A cursor this server minted -> (recorded_at, id), else 400: a deep nest or a lone surrogate included."""
     try:
-        key = json.loads(base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4)))
+        key = web.encodable(json.loads(base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4))))
         recorded_at, entry_id = key["r"], key["i"]
-    except (ValueError, TypeError, KeyError):
+    except (ValueError, TypeError, KeyError, RecursionError):
         recorded_at = entry_id = None
     if not isinstance(recorded_at, str) or not _INSTANT.fullmatch(recorded_at) or not isinstance(entry_id, str):
         raise web.bad("cursor is not one this server returned.")

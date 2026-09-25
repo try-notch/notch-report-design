@@ -71,6 +71,8 @@ def test_a_full_last_page_has_no_cursor_to_an_empty_one(api, add_entry, count, m
     {"cursor": "not a cursor!"},
     {"cursor": base64.urlsafe_b64encode(b'{"r": "yesterday", "i": "e1"}').decode()},
     {"cursor": ""},
+    {"cursor": base64.urlsafe_b64encode(b"[" * 10_000).decode()},  # deeper than the JSON parser recurses
+    {"cursor": base64.urlsafe_b64encode(b'{"r": "2026-09-21T17:30:00Z", "i": "\\ud800"}').decode()},  # unbindable id
 ])
 def test_a_page_request_this_server_did_not_mint_is_invalid(api, params):
     refused(api.get("/v1/entries", params=params), 400, "invalid_request")
@@ -126,6 +128,19 @@ def test_a_refused_edit_changes_nothing(api, add_user, add_project, add_entry, b
     before = ok(api.get("/v1/entries/e1"), 200, "entry")
     refused(api.patch("/v1/entries/e1", json=body), status, code)
     assert ok(api.get("/v1/entries/e1"), 200, "entry") == before
+
+
+@pytest.mark.parametrize("method, path", [
+    ("PATCH", "/v1/entries/e1"),             # it would reach SQLite, which cannot store it
+    ("POST", "/v1/entries/e1/takeaways"),    # it would reach the model, then the response
+])
+def test_a_lone_surrogate_escape_is_refused_before_it_is_stored_or_sent(api, fake_client, add_entry, method, path):
+    add_entry("e1")
+    before = ok(api.get("/v1/entries/e1"), 200, "entry")
+    body = b'{"transcript": "\\ud800 Shipped it."}'  # valid JSON, but no UTF-8 text can hold it
+    refused(api.request(method, path, content=body, headers={"Content-Type": "application/json"}),
+            400, "invalid_request")
+    assert ok(api.get("/v1/entries/e1"), 200, "entry") == before and fake_client.calls == []
 
 
 @pytest.mark.parametrize("state, code, status", [

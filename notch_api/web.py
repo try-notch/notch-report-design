@@ -7,6 +7,8 @@ requests and write responses through here, so "every 2xx is a contract kind" and
 "every refusal is the envelope" hold for a route wherever it lives.
 """
 
+import json
+
 from fastapi import Depends, Request
 from fastapi.responses import JSONResponse
 
@@ -62,13 +64,23 @@ def capped(request, limit):
     return Request(request.scope, receive)
 
 
+def encodable(value):
+    """
+    `value`, parsed from a request's JSON, once every string in it is text UTF-8 can hold.
+    json.loads accepts an escaped lone surrogate ("\\ud800"), which SQLite cannot bind and
+    no response can encode, so that raises UnicodeEncodeError (a ValueError) here instead.
+    """
+    json.dumps(value, ensure_ascii=False).encode()
+    return value
+
+
 def json_body(limit=JSON_BODY_LIMIT):
     """A dependency: the JSON body, read only after auth passes and capped at `limit`. Its shape is the route's to check."""
     async def read(request: Request, _=Depends(user)):
         try:
-            return await capped(request, limit).json()
+            return encodable(await capped(request, limit).json())
         except (ValueError, RecursionError):
-            raise bad("The body must be JSON.") from None
+            raise bad("The body must be JSON, and its text valid Unicode.") from None
     return read
 
 

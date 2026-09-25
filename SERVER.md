@@ -139,13 +139,16 @@ Python function every connection registers; `users.reminder_weekdays` has no sub
 - `GET /v1/stats` without `tz` uses `users.time_zone` (§3.1), not UTC (§5 contradicts it).
 - The entry list returns every analysis state (§3.3); stats, projects and reports count
   complete notches only.
+- A JSON body, or an entry-list cursor, is `400 invalid_request` when it nests past the
+  parser's recursion limit or carries an escaped lone surrogate (`"\ud800"`), which JSON
+  parsers accept but no UTF-8 text can hold, so neither SQLite nor a response could.
 
 ## Verification
 
 | Check | Result |
 | --- | --- |
-| `pytest` (offline) | 282 passed |
-| `e2e/run_e2e.py --offline` | 145/145 (Sep 25, with the record section) |
+| `pytest` (offline) | 286 passed |
+| `e2e/run_e2e.py --offline` | 147/147 (Sep 25, with the record section) |
 | `e2e/run_e2e.py` (live, three consecutive runs on Sep 24) | 120/120 each, ~2.5 min, ~$0.06 a run — before the record section; not yet re-run with it |
 
 The live run seeds the 52 demo transcripts through Jev and DeepSeek, uploads five spoken
@@ -155,11 +158,12 @@ contract — plus idempotent re-posts, the refusals (401, 404, 400 `invalid_span
 413, 422), report arithmetic (counts, contiguous momentum, floored shares, highlight ids
 drawn only from the report's notches), and that the right project, recognition and impact
 come back for each recording. Its last section, "record", walks the routes behind the
-app's live screens: every page of the entry list, `/v1/me` edited, stats recomputed from
-the entries in Pacific/Auckland and in UTC, an entry edited and its takeaways rewritten
-(writing nothing), a report discarded, the entry deleted with its audio, and finally
-`DELETE /v1/me` leaving every list empty and the settings at their defaults. Everything it sent and received is kept under
-`e2e/runs/<stamp>/`; one entry and one report from the last saved run are committed in
+app's live screens: every page of the entry list (and a cursor too deep to parse refused),
+`/v1/me` edited, stats recomputed from the entries in Pacific/Auckland and in UTC, an entry
+edited (a lone-surrogate transcript refused) and its takeaways rewritten (writing nothing),
+a report discarded, the entry deleted with its audio, and finally `DELETE /v1/me` leaving
+every list empty and the settings at their defaults. Everything it sent and received is
+kept under `e2e/runs/<stamp>/`; one entry and one report from the last saved run are committed in
 [`e2e/sample/`](e2e/sample/).
 
 The build was reviewed through four lenses (contract fidelity, correctness and security,
