@@ -9,7 +9,7 @@ import math
 import time
 from collections import Counter, defaultdict
 
-from .logs import GATE, Call, Err, group_errors, is_phone, redact
+from .logs import GATE, Call, Err, group_errors, is_phone
 from .record import UNFINISHED
 
 VERSION = 1
@@ -314,8 +314,7 @@ def pipeline(db, calls, now):
             "elapsed_ms": _r1((end - r["submitted_at"]) * 1000), "attempts": r["attempts"],
             "failure_code": r["failure_code"] if failed else None,
             "note": _note(r, phases, events) if failed else None,
-            "recording_ms": _r1((r["duration_seconds"] or 0) * 1000), "words": r["words"], "mood": r["mood"],
-            "tags": r["tags"], "summary": r["summary"] and redact(r["summary"], 140),
+            "recording_ms": _r1((r["duration_seconds"] or 0) * 1000), "words": r["words"],
             "audio_on_disk": r["audio_on_disk"], "phase_source": source, "phases": phases})
     return {"counts_24h": db["counts_24h"], "rows": rows}
 

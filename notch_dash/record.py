@@ -4,13 +4,10 @@ opened mode=ro (never store.connect, which runs PRAGMAs), a few bounded queries,
 before the snapshot is built. Instants come back as epoch seconds.
 """
 
-import json
 import os
 import pathlib
 import sqlite3
 from datetime import datetime, timezone
-
-from notch_api.config import DEV_USER_ID
 
 UNFINISHED = {"capture": ("queued", "transcribing", "analyzing"), "report": ("queued", "counting", "writing")}
 HOUR, DAY = 3600, 86400
@@ -21,7 +18,7 @@ SELECT e.id AS entry_id, j.id AS job_id, coalesce(j.state, e.analysis_state) AS 
        CASE WHEN j.id IS NOT NULL THEN j.finished_at
             WHEN e.analysis_state IN ('complete', 'failed') THEN e.updated_at END AS finished_at,
        coalesce(j.attempts, 0) AS attempts, coalesce(j.failure_code, e.analysis_failure_code) AS failure_code,
-       e.duration_seconds, CASE WHEN e.raw_text IS NOT NULL THEN e.word_count END AS words, e.mood, e.tags, e.summary
+       e.duration_seconds, CASE WHEN e.raw_text IS NOT NULL THEN e.word_count END AS words
   FROM entries e LEFT JOIN capture_jobs j ON j.entry_id = e.id
  ORDER BY coalesce(j.submitted_at, e.created_at) DESC, e.id LIMIT 20"""
 
@@ -83,8 +80,6 @@ def read(path, now, audio_dir=None):
         counts_24h = q("SELECT coalesce(j.state, e.analysis_state), count(*) FROM entries e LEFT JOIN capture_jobs j"
                        " ON j.entry_id = e.id WHERE coalesce(j.submitted_at, e.created_at) >= :day GROUP BY 1")
         job_entries = dict(q("SELECT id, entry_id FROM capture_jobs WHERE updated_at >= :day LIMIT 2000"))
-        profile = conn.execute("SELECT display_name, time_zone, weekly_goal FROM users WHERE id = ?",
-                               (DEV_USER_ID,)).fetchone()
         entries = q("SELECT count(*), coalesce(sum(recorded_at >= :week), 0) FROM entries")[0]
         by_state = q("SELECT analysis_state, count(*) FROM entries GROUP BY 1", ())
         projects = q("SELECT count(*) FROM projects", ())[0][0]
@@ -98,7 +93,6 @@ def read(path, now, audio_dir=None):
     for r in rows:
         r["state"] = "queued" if r["state"] == "pending" else r["state"]
         r.update({k: epoch(r[k]) for k in ("recorded_at", "submitted_at", "started_at", "finished_at")})
-        r["tags"] = [t for t in json.loads(r["tags"] or "[]") if isinstance(t, str)]
         found = keys.get(r["entry_id"])
         r["audio_on_disk"] = None if audio_dir is None else bool(found) and all(
             os.path.exists(os.path.join(audio_dir, key)) for key in found)
@@ -115,8 +109,6 @@ def read(path, now, audio_dir=None):
         "counts_24h": {"notches": sum(counts.values()), "complete": counts.get("complete", 0),
                        "failed": counts.get("failed", 0), "in_flight": sum(j["kind"] == "capture" for j in pending)},
         "record": {
-            "profile": {"name": profile and profile["display_name"], "time_zone": profile and profile["time_zone"],
-                        "weekly_goal": profile and profile["weekly_goal"]},
             "entries": {"total": entries[0], "last_7d": entries[1],
                         "by_state": _states(by_state, ("pending", "transcribing", "analyzing", "complete", "failed"))},
             "projects": projects,

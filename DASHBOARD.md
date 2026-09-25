@@ -6,6 +6,7 @@ This is one local page that shows the whole path a notch travels, as it happens:
 
 - **What it answers:** is anything broken right now, and where. A notch that fails or gets stuck shows up in the section it affects.
 - **What it records:** nothing of its own. It only reads, and every source is optional. A missing source shows as "Not set up" or "Can’t reach it". It is never a crash or a 500.
+- **What it shows:** metadata only: states, timings, counts, sizes, costs and errors. It never shows notch content (transcripts, summaries, takeaways, tags, mood, report text) or the profile, because Notch's server is meant to keep no content at all (the local-first decision of 2026-09-25). `test_no_notch_content_or_profile_reaches_the_snapshot` puts a marker phrase in every content column and checks the snapshot never carries it.
 
 The **Snapshot contract** section below is binding for both builders: the backend produces exactly that shape, and the page renders exactly that shape.
 
@@ -263,9 +264,6 @@ This example is illustrative. It shows one notch in flight, one written and one 
         "note": null,  // one sentence for a failed row
         "recording_ms": 31240.0,
         "words": 58,  // null until transcribed (raw_text is NULL)
-        "mood": null,  // up | flat | down
-        "tags": [],
-        "summary": null,  // ≤ 140 chars, ending in "…" when cut
         "audio_on_disk": true,  // every audio segment's file exists
         "phase_source": "metrics",  // metrics | db
         "phases": [  // in time order; a phase that never started is left out
@@ -288,9 +286,6 @@ This example is illustrative. It shows one notch in flight, one written and one 
         "note": null,
         "recording_ms": 11569.6,
         "words": 27,
-        "mood": "flat",
-        "tags": ["testing"],
-        "summary": "You ran a quick test of Notch to check that voice recognition and the pipeline work from start to finish.",
         "audio_on_disk": true,
         "phase_source": "metrics",
         "phases": [
@@ -313,9 +308,6 @@ This example is illustrative. It shows one notch in flight, one written and one 
         "note": "Couldn’t write this one. stt answered 502 after 5 tries. The audio is still here.",
         "recording_ms": 48210.0,
         "words": null,
-        "mood": null,
-        "tags": [],
-        "summary": null,
         "audio_on_disk": true,
         "phase_source": "metrics",
         "phases": [
@@ -385,7 +377,6 @@ This example is illustrative. It shows one notch in flight, one written and one 
     ]
   },
   "record": {
-    "profile": {"name": "Cc", "time_zone": "America/New_York", "weekly_goal": 5},  // the dev user
     "entries": {
       "total": 3,
       "last_7d": 3,  // recorded in the last 7 days
@@ -452,7 +443,7 @@ A source counts as *available* when its `state` is `ok` and it has a value young
 | row `job_id` | the entry has no capture job; `state` then comes from `analysis_state`, with `pending` mapped to `queued` |
 | row `finished_at` | unfinished |
 | row `failure_code`, `note` | not failed |
-| row `words`, `mood`, `summary` | not written yet |
+| row `words` | not written yet |
 | row `audio_on_disk` | the audio dir is unavailable |
 | phase `calls`, `failed_calls` | `wait` and `run` phases |
 | `models.source` | neither the metrics file nor the server log is available (then `kinds` and `recent` are `[]`) |
@@ -463,7 +454,6 @@ A source counts as *available* when its `state` is `ok` and it has a value young
 | recent `model`, `tool`, `latency_ms`, `attempt`, `job`, `entry_id`, `total_tokens`, `cost_usd` | as above; `tool` for non-chat; `job`/`entry_id` outside a job or when the job row is gone |
 | record `audio.disk_bytes`, `disk_files` | the audio dir is unavailable |
 | record `reports.last_generated_at` | there are no reports |
-| record `profile.name` | `users.display_name` is null (all three profile fields when the dev user row is missing) |
 | error group `exception` | the entry has no traceback (so always for `tunnel`) |
 | error group `where` | always for `tunnel`: cloudflared's lines name no logger |
 | every `sources.*.where` | the source is `off` |
@@ -645,7 +635,7 @@ For each check, the backend evaluates the rules top to bottom, and the first mat
 | `live.py` | `Tail`: a file follower that keeps its file open, finishes a rolled file before opening the new one, handles truncation, and holds bounded 24 h deques behind a lock, one per kind of item. `Poller`: a daemon thread with an interval, a watched-only flag and `(value, read_at, error)`. Tests call `.tick()` / `.refresh()` directly, with no threads. |
 | `logs.py` | Pure parsers for Caddy lines (classify passed/blocked/local/dash, normalize routes), server-log lines (httpx calls, error groups, the "resumed" line), tunnel-log lines (URL, WRN/ERR) and metrics lines. Also `redact`. |
 | `probes.py` | Local `/healthz`; cloudflared `/ready` + `/metrics` (a Prometheus regex for only the lines above); the public end-to-end probe and gate integrity; OpenRouter `/key`; devicectl. Every function takes an injected `httpx.Client` or `run`. |
-| `record.py` | Read-only SQLite: `connect_ro(path)` plus the bounded queries (the last 20 rows with audio presence, unfinished jobs by state and the oldest, 1 h/24 h done/failed, record counts, profile, job_id → entry_id for the capture jobs updated in 24 h, the metrics window, ≤ 2000). One connection per snapshot. |
+| `record.py` | Read-only SQLite: `connect_ro(path)` plus the bounded queries (the last 20 rows with audio presence, unfinished jobs by state and the oldest, 1 h/24 h done/failed, record counts, job_id → entry_id for the capture jobs updated in 24 h, the metrics window, ≤ 2000). One connection per snapshot. |
 | `snapshot.py` | `build(src, db, now, started=None) -> dict`: the checks, the status rules and thresholds, overall, the panels, phases and notes. Pure: given the sources' cached values and the DB rows, it returns the contract. Each check is a public function (`server_check`, `tunnel_check`, `gate_check`, `worker_check`, `openrouter_check`, `phone_check`, `overall`) so the rules are tested directly. |
 | `app.py` | `create_app(settings, *, http=None, run=subprocess.run, clock=time.time, start=True)`. It serves `GET /` (index.html), `GET /static/{app.js,style.css}` (an allow-list), `GET /api/snapshot`, the header middleware and the Host check. `Sources` wires every Tail and Poller, answers each `sources.*` entry, and reads the record once per snapshot (snapshots are built one at a time). The lifespan starts and stops the threads. |
 | `static/index.html`, `static/app.js`, `static/style.css` | The page (see below). |
@@ -737,7 +727,6 @@ The page is one file set: `static/index.html`, `app.js` and `style.css`.
   - System faces: `--font-ui`, `--font-display` (rounded), `--font-serif`, `--font-mono`.
   - Default body is subhead 15/20.
   - `font-variant-numeric: tabular-nums` on every number.
-  - Serif only for summary excerpts.
   - Mono only for measurements: times, durations, counts in tables, ms, routes, IPs, model ids and hosts.
 - **Readable text:** text that must be read uses `--ink-700` or `--ink-900`. In light mode `--ink-500`, `--label2`, `--tint`, `--warning` and `--calm` fail 4.5:1, so they are only for glyphs, bars and decoration.
 - **Motion:**
@@ -828,8 +817,8 @@ notice                only when a check is critical
   - **Header:** "{notches} in 24 h · {in_flight} working · {failed} not written".
   - **Rows:** up to 20. In-flight rows get a `--progress-bg` background.
     - **Desktop columns:** time (mono; `submitted_at`, else `recorded_at`), the state pill, the waterfall (flexible width), elapsed, recording, words.
-    - **Line two:** the summary (serif, `--ink-700`, clamped to 2 lines), then mood (plain word: Up/Flat/Down), tag chips (caption 12 on `--fill-q`), "attempt {n}" when n > 1, "audio not on disk" when `audio_on_disk` is false, and the `note` in `--ink-900`.
-    - **375 px:** each row stacks: time · pill · elapsed, then the waterfall at full width, then the summary, then "rec 11.6 s · 27 words · Flat · testing".
+    - **Line two** (only when there is something to say): "attempt {n}" when n > 1, "audio not on disk" when `audio_on_disk` is false, and the `note` in `--ink-900`.
+    - **375 px:** each row stacks: time · pill · elapsed, then the waterfall at full width, then "rec 11.6 s · 27 words".
   - **Row pill** (from `state`):
     - `queued`: "Waiting"
     - `transcribing`: "Hearing it…"
@@ -862,7 +851,6 @@ notice                only when a check is critical
   - **Recent table:** time, method, path (mono), country, user agent (one line, ellipsis) and IP (mono). At 375 px: the path on line 1; time · country · IP on line 2; the user agent on line 3.
   - A blocked probe is healthy, so nothing here is coloured as a problem.
 - **Your record:**
-  - Profile: name, time zone and "{weekly_goal} a week".
   - Metric cells: entries (with `by_state` as a caption line), projects, reports ("last written {ago} ago"), and report jobs by state.
   - Audio: "{disk_bytes} in {disk_files} files", with `past_retention` only when non-zero.
   - Bytes use 1000-based units ("1.2 MB").
@@ -923,6 +911,11 @@ To see the other states, edit a copy: null a panel, set a check to critical, or 
 A contract change updates this section and the sample JSON in the same commit, and says why.
 
 ## Verification
+
+### Metadata only (Sep 25)
+
+- `python -m pytest -q tests/test_dash_snapshot.py -k no_notch_content`: a marker phrase in every entry text column, the tags, the takeaways, the profile and a report headline. It failed on the summary before the change and passes after. `python -m pytest -q`: 381 passed.
+- Live against the phone's record: `api/snapshot` has no `summary`, `mood`, `tags` or `profile` key, and the gate secret appears 0 times. In the browser, the notch row reads "Written · wait 0 ms · run 2.0 s · rec 11.6 s · 27 words", and the console is empty.
 
 ### Review fixes (Sep 25)
 

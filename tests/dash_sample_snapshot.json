@@ -120,9 +120,6 @@
         "note": null,
         "recording_ms": 31240.0,
         "words": 58,
-        "mood": null,
-        "tags": [],
-        "summary": null,
         "audio_on_disk": true,
         "phase_source": "metrics",
         "phases": [
@@ -145,9 +142,6 @@
         "note": null,
         "recording_ms": 11569.6,
         "words": 27,
-        "mood": "flat",
-        "tags": ["testing"],
-        "summary": "You ran a quick test of Notch to check that voice recognition and the pipeline work from start to finish.",
         "audio_on_disk": true,
         "phase_source": "metrics",
         "phases": [
@@ -170,9 +164,6 @@
         "note": "Couldn’t write this one. stt answered 502 after 5 tries. The audio is still here.",
         "recording_ms": 48210.0,
         "words": null,
-        "mood": null,
-        "tags": [],
-        "summary": null,
         "audio_on_disk": true,
         "phase_source": "metrics",
         "phases": [
@@ -242,7 +233,6 @@
     ]
   },
   "record": {
-    "profile": {"name": "Cc", "time_zone": "America/New_York", "weekly_goal": 5},
     "entries": {
       "total": 3,
       "last_7d": 3,

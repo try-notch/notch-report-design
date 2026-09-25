@@ -42,7 +42,7 @@ NULLABLE = {
                                      "oldest_pending_ms")),
     *(f"checks.openrouter.{k}" for k in ("limit_usd", "remaining_usd", "today_usd", "week_usd", "month_usd",
                                          "total_usd", "free_tier", "read_at")),
-    *(f"pipeline.rows[].{k}" for k in ("job_id", "finished_at", "failure_code", "note", "words", "mood", "summary",
+    *(f"pipeline.rows[].{k}" for k in ("job_id", "finished_at", "failure_code", "note", "words",
                                        "audio_on_disk")),
     "pipeline.rows[].phases[].calls", "pipeline.rows[].phases[].failed_calls",
     "models.source", "models.note",
@@ -52,7 +52,6 @@ NULLABLE = {
     *(f"models.recent[].{k}" for k in ("model", "tool", "latency_ms", "attempt", "job", "entry_id", "total_tokens",
                                        "cost_usd")),
     "record.audio.disk_bytes", "record.audio.disk_files", "record.reports.last_generated_at",
-    "record.profile.name",  # addition: users.display_name is nullable
     "sources.*.where", "sources.*.read_at", "sources.*.reason",
     # additions: a group with no traceback has no exception, and cloudflared's lines name no logger
     "errors.server[].exception", "errors.tunnel[].exception", "errors.tunnel[].where",
@@ -203,6 +202,17 @@ def test_the_secret_never_leaves_even_when_a_log_line_or_a_referer_holds_it(stac
     assert SECRET not in body.lower() and "sk-or-v1-test" not in body and "sk-or-v1-abc" not in body
     snap = json.loads(body)
     assert "GET /v1/me" in [r["route"] for r in snap["traffic"]["routes"]]  # the old line still counts, redacted
+
+
+def test_no_notch_content_or_profile_reaches_the_snapshot(stack, conn):
+    canary, tag = "purple elephant quarterly review", "purple-elephant"
+    with conn:
+        conn.execute("UPDATE entries SET raw_text = ?, corrected_text = ?, summary = ?, tags = ?, takeaways = ?",
+                     (canary, canary, canary, json.dumps([tag]), json.dumps([canary])))
+        conn.execute("UPDATE users SET display_name = ?, role = ?, industry = ?", (canary, canary, canary))
+        conn.execute("UPDATE reports SET headline = ?", (canary,))
+    body = stack.get("api/snapshot").text
+    assert canary not in body and tag not in body
 
 
 def test_what_the_stack_shows(stack):

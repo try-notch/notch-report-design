@@ -132,7 +132,6 @@ const ROW = { queued: 'Waiting', transcribing: 'Hearing it…', analyzing: 'Maki
 const PHASE = { wait: ['Waiting', 'Waited', 'Couldn’t start'], stt: ['Hearing it…', 'Heard', 'Couldn’t hear it'],
   classify: ['Sorting it…', 'Sorted', 'Couldn’t sort it'], chat: ['Writing it up…', 'Written', 'Couldn’t write it up'],
   run: ['Making sense of it…', 'Done', 'Couldn’t finish'] };
-const MOOD = { up: 'Up', flat: 'Flat', down: 'Down' };
 function notches(s) {
   const p = s.pipeline;
   if (!p) return card(none(reason('db') || RECORD_DOWN));
@@ -143,8 +142,7 @@ function notches(s) {
 }
 function row(r) {
   const k = r.state === 'complete' ? 'ok' : r.state === 'failed' ? 'critical' : ROW[r.state] ? 'busy' : 'unknown';
-  const meta = norm([MOOD[r.mood] && h('span', {}, MOOD[r.mood]), (r.tags || []).map(t => h('span', { class: 'tag' }, t)),
-    r.attempts > 1 && h('span', {}, `attempt ${r.attempts}`), r.audio_on_disk === false && h('span', {}, 'audio not on disk'),
+  const meta = norm([r.attempts > 1 && h('span', {}, `attempt ${r.attempts}`), r.audio_on_disk === false && h('span', {}, 'audio not on disk'),
     r.note && h('span', { class: 'n-note' }, r.note)]);
   return h('li', { class: `nrow${k === 'busy' ? ' busy' : ''}` },
     h('span', { class: 'n-t mono' }, when(r.submitted_at ?? r.recorded_at)),
@@ -153,8 +151,7 @@ function row(r) {
     h('span', { class: 'n-el mono' }, dur(r.elapsed_ms)),
     h('span', { class: 'n-rec mono' }, r.recording_ms != null && `rec ${dur(r.recording_ms)}`),
     h('span', { class: 'n-w mono' }, r.words != null && plural(r.words, 'word')),
-    (r.summary || meta.length > 0) && h('div', { class: 'n-more' }, r.summary && h('p', { class: 'n-sum' }, r.summary),
-      meta.length > 0 && h('p', { class: 'n-meta' }, meta)));
+    meta.length > 0 && h('div', { class: 'n-more' }, h('p', { class: 'n-meta' }, meta)));
 }
 function fall(r) {
   const ph = r.phases || [], name = p => PHASE[p.name] ? p.name : 'run';
@@ -249,9 +246,8 @@ const states = (o, words) => dot(...Object.entries(o || {}).filter(([, v]) => v)
 function record(s) {
   const r = s.record;
   if (!r) return card(none(reason('db') || RECORD_DOWN));
-  const p = r.profile || {}, a = r.audio || {};
-  return card(h('p', { class: 'profile' }, dot(p.name, p.time_zone, p.weekly_goal != null && `${p.weekly_goal} a week`)),
-    h('div', { class: 'metrics' },
+  const a = r.audio || {};
+  return card(h('div', { class: 'metrics' },
       metric(n(r.entries.total), 'entries', dot(`${n(r.entries.last_7d)} in 7 days`, states(r.entries.by_state, ENTRY))),
       metric(n(r.projects), 'projects'),
       metric(n(r.reports.total), 'reports', r.reports.last_generated_at != null && `last written ${since(r.reports.last_generated_at)} ago`),
