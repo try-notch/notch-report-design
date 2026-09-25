@@ -172,10 +172,12 @@ def test_tail_follows_appends_rotation_and_truncation_and_keeps_a_day(tmp_path):
     tail.tick()
     assert texts()[-1] == "b1"
 
+    with open(path, "a") as f:
+        f.write("b2\n")  # written after the last read, just before the roll
     os.rename(path, tmp_path / "access.log.1")  # rolled: a new file takes the name
     path.write_text("c1\n")
     tail.tick()
-    assert texts()[-2:] == ["b1", "c1"]
+    assert texts()[-3:] == ["b1", "b2", "c1"]
 
     now[0] += 86400 + 1
     with open(path, "a") as f:

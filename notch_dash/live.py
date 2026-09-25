@@ -31,28 +31,41 @@ def describe(exc):
 class Tail:
     """
     Follows `path`, turning each complete line into an item with `parse(line, now)` (None
-    skips it). It remembers its offset and inode, starts again from byte 0 when the file is
-    replaced or gets shorter, and keeps the last 24 h of items: at most `maxlen` of each
-    `part(item)`, so a flood of one kind never pushes out another.
+    skips it). It keeps the file open between ticks; when the name points at a new file (a
+    roll) it finishes the old one first, and when the file gets shorter it starts again from
+    byte 0. It keeps the last 24 h of items: at most `maxlen` of each `part(item)`, so a flood
+    of one kind never pushes out another.
     """
 
     def __init__(self, path, parse, *, interval, maxlen=None, part=lambda item: None, clock=time.time):
         self.path, self.parse, self.part, self.interval, self.clock = path, parse, part, interval, clock
         self._parts, self._lock = defaultdict(lambda: deque(maxlen=maxlen)), threading.Lock()
-        self._inode, self._offset, self._rest = None, 0, b""
+        self._file, self._rest = None, b""
         self.read_at = self.error = None
+
+    def _read(self):
+        """(the rolled file's last bytes or None, what the current file gained since the last read)"""
+        st, rolled = os.stat(self.path), None
+        if self._file and os.fstat(self._file.fileno()).st_ino != st.st_ino:
+            rolled = self._file.read(CHUNK)
+            self._file.close()
+            self._file = None
+        if self._file is None:
+            self._file = open(self.path, "rb")
+        elif st.st_size < self._file.tell():  # truncated in place
+            self._file.seek(0)
+            self._rest = b""
+        return rolled, self._file.read(CHUNK)
 
     def tick(self):
         try:
-            with open(self.path, "rb") as f:
-                st = os.fstat(f.fileno())
-                if st.st_ino != self._inode or st.st_size < self._offset:
-                    self._inode, self._offset, self._rest = st.st_ino, 0, b""
-                f.seek(self._offset)
-                data = f.read(CHUNK)
-            self._offset += len(data)
-            *lines, self._rest = (self._rest + data).split(b"\n")
-            self._rest = self._rest[-CHUNK:]
+            rolled, data = self._read()
+            lines = []
+            if rolled is not None:  # its whole lines; a partial last one has no end to wait for
+                *lines, _ = (self._rest + rolled).split(b"\n")
+                self._rest = b""
+            *more, self._rest = (self._rest + data).split(b"\n")
+            lines, self._rest = lines + more, self._rest[-CHUNK:]
             now = self.clock()
             with self._lock:
                 for line in lines:
