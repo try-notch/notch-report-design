@@ -48,10 +48,13 @@ def test_redact_hides_the_secret_keys_and_bearer_tokens_and_bounds_the_length():
     (caddy("/<gate>/v1/me", status=502, via=False), "passed"),  # proxied, and the server wasn't there
     (caddy("/wp-login.php", status=404, via=False, ua="Mozilla/5.0 zgrab/0.x"), "blocked"),
     (caddy("/healthz", host="api.notch.localhost"), "local"),
-    (caddy("/<gate>/healthz", ua="notch-dash/1"), None),  # the dashboard's own probe
+    (caddy("/<gate>/healthz", ua=logs.OWN_UA), None),  # the dashboard's own probe
+    (caddy("/docs", status=404, via=False, ua="notch-dash/1"), "blocked"),  # anyone can send that user agent
+    (caddy("/healthz", ua=logs.OWN_UA), "passed"),  # through without the secret: a leak, whoever sent it
     (caddy("/api/snapshot", host="dash.notch.localhost"), None),
     ("not json", None),
-], ids=["passed", "wrong-secret", "proxied-502", "probe", "local", "own-probe", "other-host", "junk"])
+], ids=["passed", "wrong-secret", "proxied-502", "probe", "local", "own-probe", "forged-own-probe", "own-probe-leaked",
+        "other-host", "junk"])
 def test_caddy_lines_are_sorted_into_passed_blocked_and_local(line, kind):
     req = logs.parse_caddy(line)
     assert (req and req.kind) == kind

@@ -8,6 +8,7 @@ Log text, paths and user agents come from the internet (public probes): they are
 
 import json
 import re
+import secrets
 import sys
 from collections import namedtuple
 from datetime import datetime, timezone
@@ -15,6 +16,9 @@ from datetime import datetime, timezone
 from notch_api.metrics import kind as call_kind
 
 GATE_HOST, LOCAL_HOST, GATE = "notch-gate.localhost", "api.notch.localhost", "/<gate>"
+# The dashboard's public probes send this user agent and ask only these paths. The token is new each run, so a
+# prober that copies "notch-dash/1" is still counted.
+OWN_UA, OWN_PATHS = f"notch-dash/1 ({secrets.token_hex(8)})", (GATE + "/healthz", "/healthz", "/docs")
 
 Req = namedtuple("Req", "at kind method path route status ms ua host country ip")  # kind: passed | blocked | local
 Call = namedtuple("Call", "at kind model tool status ok ms attempt job job_id usage")
@@ -45,7 +49,7 @@ def route(method, uri):
 
 
 def parse_caddy(line, now=None):
-    """One access-log line -> Req, or None for other hosts, notch-dash's own requests and junk."""
+    """One access-log line -> Req, or None for other hosts, this run's own probes and junk."""
     try:
         entry = json.loads(line)
         request = entry["request"]
@@ -54,15 +58,17 @@ def parse_caddy(line, now=None):
         host, resp_headers = request.get("host"), {k.lower() for k in entry.get("resp_headers") or {}}
     except (ValueError, KeyError, TypeError, AttributeError):
         return None
-    ua = _text(headers.get("user-agent")) or ""
-    if host not in (GATE_HOST, LOCAL_HOST) or ua.startswith("notch-dash/"):
+    if host not in (GATE_HOST, LOCAL_HOST):
         return None
+    ua = _text(headers.get("user-agent")) or ""
     method, uri = _text(request.get("method"), 16) or "?", redact(request.get("uri") or "", None)
     if host == LOCAL_HOST:
         kind = "local"
     else:  # passed = Caddy proxied it: the server answered (Via), or wasn't there to
         proxied = "via" in resp_headers or (uri.startswith(GATE + "/") and status in (502, 503, 504))
         kind = "passed" if proxied else "blocked"
+    if ua == OWN_UA and uri in OWN_PATHS and (kind == "blocked" or uri.startswith(GATE + "/")):
+        return None  # our own probe, unless it got through without the secret: that is a leak to count
     return Req(at, kind, method, redact(uri, 200), route(method, uri), status, ms, sys.intern(ua),
                _text(headers.get("x-forwarded-host")), _text(headers.get("cf-ipcountry"), 8),
                _text(headers.get("cf-connecting-ip"), 64))

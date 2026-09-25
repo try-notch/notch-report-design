@@ -11,6 +11,7 @@ import pytest
 
 from notch_dash import probes
 from notch_dash.live import Unreadable
+from notch_dash.logs import OWN_UA
 
 SECRET = "3f9a0c1e5b7d2f4a6c8e0b1d3f5a7c9e1b3d5f7a9c0e2b4d"
 HOST = "absolutely-innovations-candles-staff.trycloudflare.com"
@@ -67,7 +68,7 @@ def test_the_public_probe_sends_the_secret_only_in_its_request(tmp_path):
     result = probes.end_to_end(http(answer), HOST, str(secret_file))
     assert result["ok"] and result["http_status"] == 200 and result["error"] is None
     assert str(seen[0].url) == f"https://{HOST}/{SECRET}/healthz"
-    assert seen[0].headers["User-Agent"].startswith("notch-dash/")
+    assert seen[0].headers["User-Agent"] == OWN_UA  # the user agent the Caddy reader leaves out
     assert SECRET not in json.dumps(result)
 
 

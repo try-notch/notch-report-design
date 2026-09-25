@@ -16,9 +16,9 @@ import time
 import httpx
 
 from .live import Unreadable, describe
-from .logs import redact
+from .logs import OWN_UA, redact
 
-UA = {"User-Agent": "notch-dash/1"}
+UA = {"User-Agent": OWN_UA}
 SECRET = re.compile(r"[0-9a-f]{48}")
 APPLE_EPOCH = 978307200  # 2001-01-01 in Unix seconds; devicectl counts from there
 

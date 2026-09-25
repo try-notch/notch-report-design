@@ -83,8 +83,13 @@ A **Poller** is one daemon thread that calls one function on a fixed interval an
 - On start it reads the whole current file and keeps only the last 24 h. Rotated backups are ignored.
 
 **Public probes**
-- They send `User-Agent: notch-dash/1`.
-- Their requests show up in Caddy's log. The dashboard excludes them from phone, traffic and gate counts, and counts them nowhere.
+- They send `User-Agent: notch-dash/1 (<token>)`, where the token is 16 random hex characters drawn each run (`logs.OWN_UA`). Only the dashboard and Caddy's 0600 log know it.
+- Their requests show up in Caddy's log. The dashboard leaves a line out of phone, traffic and gate counts, and counts it nowhere, only when all three hold:
+  - the user agent is exactly this run's,
+  - the uri is one the probes ask (`/<gate>/healthz`, `/healthz`, `/docs`),
+  - and it was blocked or went through the gate. A probe that got through without the secret is kept, so it counts toward `passed_without_secret_10m`.
+- **Why a token:** anyone can send `notch-dash/1`. With a plain prefix match, a prober could hide from the Gate panel and a request that got through without the secret could hide from the leak alarm.
+- **After a restart** the previous run's probes carry a different token. Until they are 24 h old they count as ordinary requests: blocked `/healthz` and `/docs`, and `GET /healthz` gate traffic, with a `notch-dash/1 (…)` user agent that says whose they are.
 
 **Gate secret file**
 - It is read each time a probe runs. It must be exactly 48 lowercase hex characters after stripping whitespace; otherwise the source is `unreachable`.
@@ -313,7 +318,7 @@ This example is illustrative. It shows one notch in flight, one written and one 
       }
     ]
   },
-  "traffic": {  // phone + local requests; never blocked probes or notch-dash/1
+  "traffic": {  // phone + local requests; never blocked probes or this run's own probes
     "requests_1h": 11,
     "errors_1h": 0,  // status ≥ 400
     "by_source_1h": {"gate": 10, "local": 1},  // gate = passed notch-gate.localhost; local = api.notch.localhost
@@ -482,7 +487,7 @@ A source counts as *available* when its `state` is `ok` and it has a value young
   - **Which requests passed:** a `notch-gate.localhost` request *passed* the gate when Caddy proxied it. Its `resp_headers` has `Via`, or it is a 502/503/504 under `/<gate>/`.
     - Everything else on that host is *blocked*. That includes wrong-secret requests, which Caddy's filter also logs as `/<gate>/…`.
   - **Gate leak:** a passed request whose uri is not under `/<gate>/` counts toward `passed_without_secret_10m`.
-  - **Traffic:** traffic is passed gate requests plus every `api.notch.localhost` request. Requests with a user agent starting `notch-dash/` are dropped everywhere.
+  - **Traffic:** traffic is passed gate requests plus every `api.notch.localhost` request. The dashboard's own probes are dropped everywhere, by the rule under Public probes.
   - **The phone:** a passed request whose user agent starts with `Notch/`.
   - **Route normalization:**
     1. Drop the `/<gate>` prefix and the query string.

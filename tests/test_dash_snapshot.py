@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 from notch_api.config import DEV_USER_ID
 from notch_dash import snapshot
 from notch_dash.app import create_app
-from notch_dash.logs import Req
+from notch_dash.logs import OWN_UA, Req
 from notch_dash.settings import Settings
 from tests.test_dash_logs import SECRET, caddy
 from tests.test_dash_probes import DEVICES, METRICS, fake_devicectl
@@ -167,7 +167,7 @@ def stack(tmp_path, db_path, audio_dir, conn, jobs):
                   caddy(f"/{SECRET}/v1/me", ts=NOW - 30, Referer=f"https://{HOST}/{SECRET}/",
                         **{"X-Forwarded-Host": HOST}),
                   caddy("/healthz", host="api.notch.localhost", ua="curl/8.7.1", ts=NOW - 15),
-                  caddy("/<gate>/healthz", ua="notch-dash/1", ts=NOW - 5),
+                  caddy("/<gate>/healthz", ua=OWN_UA, ts=NOW - 5),
                   caddy("/wp-login.php", status=404, via=False, ua="curl/8.7.1", ts=NOW - 15.7),
                   caddy("/.env", status=404, via=False, ua="Mozilla/5.0 zgrab/0.x", country="DE", ts=NOW - 27500)],
         "server": [f"{stamp(3000)} INFO notch_api.app: resumed 0 unfinished job(s)",
@@ -217,7 +217,7 @@ def test_what_the_stack_shows(stack):
     assert (checks["gate"]["blocked_1h"], checks["gate"]["blocked_24h"]) == (1, 2)
     assert checks["worker"]["captures"] == {"queued": 0, "transcribing": 0, "analyzing": 1}
     assert (checks["worker"]["done_24h"], checks["worker"]["failed_24h"], checks["worker"]["failed_1h"]) == (3, 1, 1)
-    assert snap["traffic"]["by_source_1h"] == {"gate": 3, "local": 1}  # never the probes, never notch-dash/1
+    assert snap["traffic"]["by_source_1h"] == {"gate": 3, "local": 1}  # never the probes, never our own
     assert [b["path"] for b in snap["blocked"]["recent"]] == ["/wp-login.php", "/.env"]
     assert snap["models"]["source"] == "metrics"
     kinds = {k["kind"]: k for k in snap["models"]["kinds"]}
