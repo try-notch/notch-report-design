@@ -924,6 +924,31 @@ A contract change updates this section and the sample JSON in the same commit, a
 
 ## Verification
 
+### Review fixes (Sep 25)
+
+Each finding was reproduced before it was fixed, and each new or changed test failed first.
+
+| Finding | Reproduced | Test that failed first |
+|---|---|---|
+| A prober sending `notch-dash/1` hid from the Gate panel and the leak alarm | the reviewer's synthetic lines: forged user agent → dropped, leak → gate `unknown` | `test_dash_logs.py::test_caddy_lines_are_sorted_into_passed_blocked_and_local[forged-own-probe, own-probe-leaked, earlier-run-probe]` |
+| Snapshot readable from the network through Caddy's `*:80` | `curl -H 'Host: dash.notch.localhost' http://<LAN ip>/api/snapshot` → 200 with the full snapshot | `test_dash_app.py::test_only_this_mac_is_answered_even_through_caddy` |
+| A percent-escaped secret wasn't redacted | a throwaway Caddy on 127.0.0.1:4159 (`admin off`, a stand-in secret): escaped and upper-case forms both passed `handle_path` and were logged raw | `test_dash_logs.py::test_redact_hides_a_secret_with_escaped_characters_which_caddy_unescapes_and_lets_through` |
+| The secret went to any host the metrics port named | the reviewer's MockTransport script: the probe went to `collector.example.net` | `test_dash_probes.py::test_cloudflared_names_no_host_that_is_not_a_quick_tunnel_since_the_secret_goes_there` |
+| 50 000 blocked probes evicted the phone | the reviewer's script: at 50 000 the phone read "Not seen" and `phone_host` null; after the fix, 60 000 left it Fine with its host | `test_dash_snapshot.py::test_a_flood_of_blocked_probes_never_pushes_the_phone_out_of_the_window` |
+| Server and tunnel log windows unbounded | 20 000 cloudflared ERR lines: 71 ms a snapshot; after the fix 100 000 lines keep 5 000, 6 MB, 3 ms | none: the bound is a setting, and the per-kind windows are held by the flood test above |
+| A line written just before a roll was lost | write, tick, append, rename, new file, tick → the appended line missing | the roll step of `test_dash_logs.py::test_tail_follows_appends_rotation_and_truncation_and_keeps_a_day` |
+| A 500 happening now was dated hours back | the reviewer's script: last stamp 5 h ago → "5 h ago"; 25 h ago → no error shown; after the fix both "0 s ago" | `test_dash_logs.py::test_a_timeless_error_takes_the_last_stamp_in_the_backlog_but_the_time_it_was_read_once_followed` |
+| Moved cleared itself a day after the phone's last request | a phone request 25 h old through an old address → tunnel Fine | `test_dash_snapshot.py::test_the_tunnel_stays_moved_after_the_phone_last_got_through_over_a_day_ago` |
+| `/healthz` every 2 s with nobody watching | an unwatched instance wrote 10 `GET /healthz` lines to `phone-server.log` in 20 s, from its own connection (lsof) | none: a scheduling flag; checked live below |
+
+**Live**, with the command under Run it, read-only (the phone server, Caddy and cloudflared untouched; `phone.db` kept its size and mtime):
+- Unwatched for 20 s: 0 new `/healthz` lines. The first snapshot after that said "Can’t tell yet" (server "Not checked yet"); the next, 2 s later, "All fine", with the server answering in 4 ms.
+- All six checks Fine; every source `ok` but `metrics`, still waiting for the phone server's restart. A snapshot took 2 ms.
+- Gate: `blocked_24h` 1 (`/wp-login.php`), where before the earlier-run rule it was 53, 52 of them earlier dashboard runs' probes. The 33 lines this run's probes wrote to Caddy's log counted nowhere. The 4 `GET /healthz` left in traffic are curl checks (2 local, 2 through the gate).
+- From the Mac's LAN address the snapshot and page get 403, also with a forged `X-Forwarded-For: 127.0.0.1`. Through `dash.notch.localhost` and straight to 127.0.0.1:4130 they get 200. POST 405, a foreign Host 421, and the four headers on the snapshot.
+- `grep -c` found the gate secret and the OpenRouter key 0 times each in `api/snapshot`, `/`, `static/app.js`, `static/style.css` and the dashboard's log; no run of 48 hex in the snapshot.
+- The page at http://dash.notch.localhost in the in-app browser: All fine, the Gate panel listing only `/wp-login.php`, and no console messages.
+
 ### Integration: backend and page together (Sep 25)
 
 Run live and read-only with the command under Run it (the three optional files pointing at this session's `phone-server.log`, `tunnel.log` and `gate-secret`). The phone server on 4131, Caddy and cloudflared were not touched; `phone.db` kept its size and mtime.
