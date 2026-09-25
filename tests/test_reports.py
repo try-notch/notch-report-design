@@ -313,6 +313,14 @@ def test_a_report_discarded_while_it_is_counted_asks_the_model_nothing(conn, db_
     assert not [r for r in caplog.records if r.levelname in ("WARNING", "ERROR")]  # no crash logged
 
 
+def test_the_prompt_dates_each_notch_by_its_day_in_the_users_zone(conn, db_path, fake_client, add_entry):
+    with conn:
+        conn.execute("UPDATE users SET time_zone = 'America/Los_Angeles' WHERE id = ?", (DEV,))  # UTC-7
+    add_entry("sun-eve", "2026-09-28T03:30:00Z")  # Sun Sep 27, 20:30 in LA (the reminder's hour); Sep 28 in UTC
+    run_report_job(db_path, accept_report(conn, DEV, _req())[1], client=fake_client)
+    assert "\n[id sun-eve] 2026-09-27 — " in fake_client.calls[0][1]["user"]  # the last day of Sep 21 – 27
+
+
 def test_above_sixty_notches_the_prompt_carries_summaries_only(conn, db_path, fake_client, add_entry):
     for i in range(61):
         add_entry(f"e{i:02d}", "2026-09-22")

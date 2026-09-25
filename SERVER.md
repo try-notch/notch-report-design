@@ -75,6 +75,8 @@ response is validated against a JSON Schema of its §5 object before it is sent
 **Days are the user's.** Stats and report ranges (their scope and momentum buckets) count a
 notch on its `recorded_at` read in the user's IANA zone: `users.time_zone`, which the app
 keeps current with `PATCH /v1/me`, unless a stats request passes `tz`. A new user is `UTC`.
+The report writer's prompt dates each notch by that same local day, so an evening notch in
+Los Angeles is not written about as the next day's.
 
 ## Which model does what
 
@@ -147,7 +149,7 @@ Python function every connection registers; `users.reminder_weekdays` has no sub
 
 | Check | Result |
 | --- | --- |
-| `pytest` (offline) | 286 passed |
+| `pytest` (offline) | 287 passed |
 | `e2e/run_e2e.py --offline` | 147/147 (Sep 25, with the record section) |
 | `e2e/run_e2e.py` (live, three consecutive runs on Sep 24) | 120/120 each, ~2.5 min, ~$0.06 a run — before the record section; not yet re-run with it |
 

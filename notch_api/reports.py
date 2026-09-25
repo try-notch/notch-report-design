@@ -348,7 +348,11 @@ def _set_job(conn, job_id, state, code=None):
 
 
 def _user_message(conn, report, entries):
-    """Who, what range, the FACTS (the frozen numbers), the per-category counts, then every notch."""
+    """
+    Who, what range, the FACTS (the frozen numbers), the per-category counts, then every
+    notch, dated by its day in the user's zone: the days the range was counted in.
+    """
+    tz = store.user_zone(conn, report["user_id"])
     user = conn.execute("SELECT display_name, role, industry, years_experience FROM users WHERE id = ?",
                         (report["user_id"],)).fetchone()
     who = ", ".join(filter(None, [user["role"], user["industry"], user["years_experience"]
@@ -390,7 +394,8 @@ def _user_message(conn, report, entries):
     ]
     for row in entries:
         e = store.entry_to_wire(row, row["project_name"], None)
-        lines.append(f"[id {e['id']}] {e['recorded_at'][:10]} — project: {e['project'] or 'none'}"
+        lines.append(f"[id {e['id']}] {store.local_date(e['recorded_at'], tz).isoformat()}"
+                     f" — project: {e['project'] or 'none'}"
                      f" — tags: {', '.join(e['tags']) or 'none'}"
                      f" — categories: {', '.join(store.json_list(row['categories'])) or 'none'}"
                      + (" — milestone" if e["is_milestone"] else ""))
