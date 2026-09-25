@@ -59,7 +59,7 @@ A **Poller** is one daemon thread that calls one function on a fixed interval an
 
 - **Failures keep the last good value.** When a read fails, the poller keeps the last good value and records the error.
 - **The snapshot drops stale values.** It uses a value only while it is younger than that source's *max age*. After that, the value counts as missing.
-- **"Watched only":** these pollers run only while someone is watching, meaning a snapshot was served in the last 60 s. The public probes use this so an idle dashboard doesn't knock on the tunnel all day. When a viewer returns, those pollers run again within about 1 s.
+- **"Watched only":** these pollers run only while someone is watching, meaning a snapshot was served in the last 60 s. The public probes use this so an idle dashboard doesn't knock on the tunnel all day. So does the local server probe: uvicorn writes an access line for every `/healthz`, and every 2 s that was about 43 000 lines a day in the server's unrotated log, which the dashboard itself tails. When a viewer returns, those pollers run again within about 1 s, so the first snapshot after an idle minute shows the server as "Not checked yet" (overall "Can’t tell yet") and the next one has it.
 - **A source's `state` is about reading, not age:** it is `ok` while its last read worked, even when that value has since grown too old to use. So a probe that paused while nobody watched stays `ok` (with its old `read_at`) and only its value is dropped, instead of showing "Can’t reach it" on the first poll after an idle spell.
 
 | Source | How | Every | Timeout | Max age | Kept |
@@ -68,7 +68,7 @@ A **Poller** is one daemon thread that calls one function on a fixed interval an
 | Metrics JSONL | tail | 2 s | – | – | 24 h of call events (≤ 20 000), indexed by `job_id` |
 | Server log | tail | 2 s | – | – | 24 h of errors and of httpx model lines (≤ 5 000 of each), and the last "resumed" line |
 | Tunnel log | tail | 5 s | – | – | the latest `https://*.trycloudflare.com`, and 24 h of WRN/ERR lines (≤ 5 000) |
-| Local `GET 127.0.0.1:<NOTCH_PORT>/healthz` | poller | 2 s | 2 s | 10 s | the latest result, including failures |
+| Local `GET 127.0.0.1:<NOTCH_PORT>/healthz` | poller, watched only | 2 s | 2 s | 10 s | the latest result, including failures |
 | cloudflared `/ready` + `/metrics` | poller | 5 s | 2 s | 30 s | the last good read |
 | Public end-to-end probe `GET https://<host>/<secret>/healthz` | poller, watched only | 15 s | 10 s | 60 s | the latest result |
 | Gate integrity `GET https://<host>/healthz` and `/docs` (no secret) | poller, watched only | 60 s | 10 s | 5 min | the latest result |

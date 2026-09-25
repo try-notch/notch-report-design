@@ -59,7 +59,7 @@ class Sources:
         self.metrics = tail(s.metrics, logs.parse_metric, 2, 20_000)
         self.server_log = tail(s.server_log, self.server_parser.feed, 2, LOG_KEEP, type)
         self.tunnel_log = tail(s.tunnel_log, self.tunnel_parser.feed, 5, LOG_KEEP)
-        self.health = poll(lambda: probes.local_health(http, s.notch_port), 2, 10)
+        self.health = poll(lambda: probes.local_health(http, s.notch_port), 2, 10, True)  # the server logs each one
         self.cloudflared = poll(lambda: probes.cloudflared(http, s.tunnel_metrics), 5, 30)
         self.e2e = poll(lambda: probes.end_to_end(http, self.host(clock()), s.gate_secret_file), 15, 60, True)
         self.integrity = poll(lambda: probes.gate_integrity(http, self.host(clock())), 60, 300, True)
@@ -80,7 +80,7 @@ class Sources:
         }
         # (step, interval, watched_only): the local server, every configured source, and last the gate,
         # which needs the host the tunnel sources give
-        self.jobs = [(self.health.refresh, self.health.interval, False)]
+        self.jobs = [(self.health.refresh, self.health.interval, True)]
         for source, configured, _ in self.named.values():
             if isinstance(source, Tail) and configured:
                 self.jobs.append((source.tick, source.interval, False))
