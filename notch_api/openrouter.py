@@ -29,6 +29,7 @@ from email.utils import parsedate_to_datetime
 
 import httpx
 
+from . import metrics
 from .config import (CHAT_MODEL, DECISIONS_URL, JEV_MODEL, MAX_UPLOAD_BYTES, OPENROUTER_BASE, STT_MODEL,
                      TTS_MODEL, TTS_VOICE)
 
@@ -179,7 +180,7 @@ class OpenRouterClient:
         for attempt in range(self.max_attempts):
             wait = self.backoff * 2 ** attempt
             try:
-                response = self._http.post(url, json=payload, headers=self._headers)
+                response = self._send(url, payload, attempt + 1)
             except httpx.RequestError as exc:
                 reason = type(exc).__name__
             else:
@@ -203,6 +204,19 @@ class OpenRouterClient:
             if attempt + 1 < self.max_attempts:
                 time.sleep(wait)
         raise ModelUnavailable(f"OpenRouter unavailable after {self.max_attempts} attempts ({reason}).")
+
+    def _send(self, url, payload, attempt):
+        """One HTTP attempt, recorded by metrics.py however it ends; returns or raises exactly what httpx did."""
+        wall, start, status, response = time.time(), time.perf_counter(), "error", None
+        try:
+            response = self._http.post(url, json=payload, headers=self._headers)
+            status = response.status_code
+            return response
+        except httpx.TimeoutException:
+            status = "timeout"
+            raise
+        finally:
+            metrics.record(url, payload, attempt, wall, time.perf_counter() - start, status, response)
 
     # -- the model jobs -----------------------------------------------------
 

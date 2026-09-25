@@ -35,6 +35,8 @@ PROJECT_CONFIDENCE = 0.5   # below this, a project choice leaves the notch unass
 
 DB_PATH = os.environ.get("NOTCH_DB") or os.path.join(REPO_ROOT, "data", "notch_api.db")
 AUDIO_DIR = os.environ.get("NOTCH_AUDIO_DIR") or os.path.join(REPO_ROOT, "data", "audio")
+# One JSON line per model call, for notch_dash; written only when notch_api.__main__ turns metrics.py on.
+METRICS_PATH = os.environ.get("NOTCH_METRICS") or os.path.splitext(DB_PATH)[0] + "-metrics.jsonl"
 PORT = int(os.environ.get("NOTCH_PORT") or 4131)  # api.notch.localhost via Caddy
 # 127.0.0.1 keeps the development bearer off the network. A phone on the same Wi-Fi
 # needs NOTCH_HOST=0.0.0.0, which opens it to the whole LAN while it runs.

@@ -9,6 +9,8 @@ modules (prompt_variants, seed_db, llm). The environment chooses everything else
   NOTCH_PORT         port, default 4131
   NOTCH_DB           SQLite file, default data/notch_api.db
   NOTCH_AUDIO_DIR    stored uploads, default data/audio
+  NOTCH_METRICS      one JSON line per model call, for notch_dash; default the DB path
+                     with -metrics.jsonl (data/notch_api-metrics.jsonl)
   NOTCH_FAKE_MODELS  1 = the offline doubles from fakes.py instead of OpenRouter and
                      ffmpeg, so the whole server runs with no key and no network
   OPENROUTER_API_KEY read on the first model call, not at boot
@@ -19,7 +21,7 @@ import os
 
 import uvicorn
 
-from . import audio, config
+from . import audio, config, metrics
 from .app import create_app
 from .fakes import FakeClient, fake_transcode
 
@@ -27,6 +29,7 @@ from .fakes import FakeClient, fake_transcode
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     fake = os.environ.get("NOTCH_FAKE_MODELS") == "1"
+    metrics.path = config.METRICS_PATH  # FakeClient never reaches OpenRouterClient._post, so fakes record nothing
     if fake:
         logging.getLogger(__name__).info("NOTCH_FAKE_MODELS=1: offline fake models, no OpenRouter calls")
     app = create_app(db_path=config.DB_PATH, audio_dir=config.AUDIO_DIR,
