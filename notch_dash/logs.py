@@ -10,6 +10,7 @@ import json
 import re
 import secrets
 import sys
+import time
 from collections import namedtuple
 from datetime import datetime, timezone
 
@@ -17,8 +18,10 @@ from notch_api.metrics import kind as call_kind
 
 GATE_HOST, LOCAL_HOST, GATE = "notch-gate.localhost", "api.notch.localhost", "/<gate>"
 # The dashboard's public probes send this user agent and ask only these paths. The token is new each run, so a
-# prober that copies "notch-dash/1" is still counted.
+# prober that copies "notch-dash/1" after this run started is still counted; before it, such a line is taken as
+# an earlier run's probe.
 OWN_UA, OWN_PATHS = f"notch-dash/1 ({secrets.token_hex(8)})", (GATE + "/healthz", "/healthz", "/docs")
+STARTED = time.time()
 
 Req = namedtuple("Req", "at kind method path route status ms ua host country ip")  # kind: passed | blocked | local
 Call = namedtuple("Call", "at kind model tool status ok ms attempt job job_id usage")
@@ -67,8 +70,9 @@ def parse_caddy(line, *_):
     else:  # passed = Caddy proxied it: the server answered (Via), or wasn't there to
         proxied = "via" in resp_headers or (uri.startswith(GATE + "/") and status in (502, 503, 504))
         kind = "passed" if proxied else "blocked"
-    if ua == OWN_UA and uri in OWN_PATHS and (kind == "blocked" or uri.startswith(GATE + "/")):
-        return None  # our own probe, unless it got through without the secret: that is a leak to count
+    own = ua == OWN_UA or ua.startswith("notch-dash/") and at < STARTED  # this run's, or an earlier one's
+    if own and uri in OWN_PATHS and (kind == "blocked" or uri.startswith(GATE + "/")):
+        return None  # a probe of ours, unless it got through without the secret: that is a leak to count
     return Req(at, kind, method, redact(uri, 200), route(method, uri), status, ms, sys.intern(ua),
                _text(headers.get("x-forwarded-host")), _text(headers.get("cf-ipcountry"), 8),
                _text(headers.get("cf-connecting-ip"), 64))

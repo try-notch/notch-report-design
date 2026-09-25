@@ -88,11 +88,11 @@ A **Poller** is one daemon thread that calls one function on a fixed interval an
 **Public probes**
 - They send `User-Agent: notch-dash/1 (<token>)`, where the token is 16 random hex characters drawn each run (`logs.OWN_UA`). Only the dashboard and Caddy's 0600 log know it.
 - Their requests show up in Caddy's log. The dashboard leaves a line out of phone, traffic and gate counts, and counts it nowhere, only when all three hold:
-  - the user agent is exactly this run's,
+  - the user agent is exactly this run's, or, for a line from before this run started, any `notch-dash/` one (an earlier run's probes, which carry another token or none),
   - the uri is one the probes ask (`/<gate>/healthz`, `/healthz`, `/docs`),
   - and it was blocked or went through the gate. A probe that got through without the secret is kept, so it counts toward `passed_without_secret_10m`.
-- **Why a token:** anyone can send `notch-dash/1`. With a plain prefix match, a prober could hide from the Gate panel and a request that got through without the secret could hide from the leak alarm.
-- **After a restart** the previous run's probes carry a different token. Until they are 24 h old they count as ordinary requests: blocked `/healthz` and `/docs`, and `GET /healthz` gate traffic, with a `notch-dash/1 (…)` user agent that says whose they are.
+- **Why a token:** anyone can send `notch-dash/1`. With a plain prefix match, a prober could hide from the Gate panel and a request that got through without the secret could hide from the leak alarm. Now a line sent after this run started can't be hidden at all, and one sent before it only when it is a blocked request to one of those three paths.
+- **Why earlier runs count as ours:** without that, every restart turned the last run's probes (two to four a minute while watched) into blocked `/healthz` and `/docs` rows and `GET /healthz` gate traffic for a day. Live, that was 52 of 53 "blocked probes" and the busiest route.
 
 **Tunnel host**
 - The public probes send the secret to `host`, and whatever answers on the metrics port names it, so only a whole `<name>.trycloudflare.com` is taken from `userHostname`. Anything else is ignored and the tunnel log's address is used instead, the same rule the tunnel log already had.
