@@ -16,7 +16,7 @@ import time
 import httpx
 
 from .live import Unreadable, describe
-from .logs import OWN_UA, redact
+from .logs import OWN_UA, QUICK_HOST, redact
 
 UA = {"User-Agent": OWN_UA}
 SECRET = re.compile(r"[0-9a-f]{48}")
@@ -87,7 +87,8 @@ def cloudflared(http, where):
         elif name == "cloudflared_tunnel_request_errors":
             out["request_errors"] = int(value)
         elif name == "cloudflared_tunnel_user_hostnames_counts" and value > 0:
-            out["host"] = redact(labels.get("userHostname", "").removeprefix("https://"), 200) or None
+            host = labels.get("userHostname", "").removeprefix("https://")
+            out["host"] = host if QUICK_HOST.fullmatch(host) else out["host"]  # anyone can answer on this port
         elif name == "cloudflared_tunnel_ha_connections":
             ha = int(value)
     connections = (_json(ready) or {}).get("readyConnections")

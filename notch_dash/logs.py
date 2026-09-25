@@ -132,7 +132,8 @@ class ServerLog:
 
 
 _TUNNEL = re.compile(r"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)Z (WRN|ERR) (.*)")
-_URL = re.compile(r"https://([a-z0-9-]+\.trycloudflare\.com)\b")
+QUICK_HOST = re.compile(r"[a-z0-9-]+\.trycloudflare\.com")  # a quick tunnel's address: the probes send the secret there
+_URL = re.compile(rf"https://({QUICK_HOST.pattern})\b")
 _FIELDS = re.compile(r'\s+[\w.-]+=(?:"(?:[^"\\]|\\.)*"|\S+)')
 
 

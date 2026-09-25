@@ -47,6 +47,16 @@ def test_cloudflared_reads_ready_and_only_the_metrics_the_tunnel_check_shows():
         "requests_total": 53, "request_errors": 2, "host": HOST}
 
 
+@pytest.mark.parametrize("named", ["collector.example.net", f"{HOST}.example.net"], ids=["foreign", "lookalike"])
+def test_cloudflared_names_no_host_that_is_not_a_quick_tunnel_since_the_secret_goes_there(named):
+    def handler(request):
+        if request.url.path == "/ready":
+            return httpx.Response(200, json={"readyConnections": 1})
+        return httpx.Response(200, text=METRICS.replace(HOST, named))  # whatever answers on the metrics port
+
+    assert probes.cloudflared(http(handler), "127.0.0.1:20241")["host"] is None
+
+
 def test_a_tunnel_with_no_connection_reads_as_zero_not_as_a_failure():
     def handler(request):
         if request.url.path == "/ready":

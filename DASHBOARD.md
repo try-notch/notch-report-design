@@ -91,6 +91,10 @@ A **Poller** is one daemon thread that calls one function on a fixed interval an
 - **Why a token:** anyone can send `notch-dash/1`. With a plain prefix match, a prober could hide from the Gate panel and a request that got through without the secret could hide from the leak alarm.
 - **After a restart** the previous run's probes carry a different token. Until they are 24 h old they count as ordinary requests: blocked `/healthz` and `/docs`, and `GET /healthz` gate traffic, with a `notch-dash/1 (…)` user agent that says whose they are.
 
+**Tunnel host**
+- The public probes send the secret to `host`, and whatever answers on the metrics port names it, so only a whole `<name>.trycloudflare.com` is taken from `userHostname`. Anything else is ignored and the tunnel log's address is used instead, the same rule the tunnel log already had.
+- What this can't stop: if cloudflared isn't holding its metrics port, another local account could listen there and name a quick tunnel of its own. Keep cloudflared running while the dashboard is, or set `NOTCH_DASH_TUNNEL_METRICS` to empty and rely on the tunnel log.
+
 **Gate secret file**
 - It is read each time a probe runs. It must be exactly 48 lowercase hex characters after stripping whitespace; otherwise the source is `unreachable`.
 - The secret lives only inside the probe function.
@@ -431,7 +435,7 @@ A source counts as *available* when its `state` is `ok` and it has a value young
 | `checks.phone.requests_1h` | the Caddy log is unavailable |
 | `checks.phone.device` | devicectl is off or unavailable, or the UDID isn't listed |
 | `checks.tunnel.ready_connections` … `request_errors`, `read_at` | cloudflared metrics are unavailable (`read_at` is null only if it was never read) |
-| `checks.tunnel.host` | neither the metrics nor the tunnel log gives a host |
+| `checks.tunnel.host` | neither the metrics nor the tunnel log gives a quick-tunnel host |
 | `checks.tunnel.phone_host` | no phone request in 24 h, or the Caddy log is unavailable |
 | `checks.tunnel.probe` | no secret, no host, not run yet, or older than 60 s |
 | `checks.gate.integrity` | no host, not run yet, or older than 5 min |
