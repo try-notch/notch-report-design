@@ -57,10 +57,10 @@ and resets the profile and settings to their defaults. The user row stays.
 | `GET /v1/projects` · `POST /v1/projects` | Counts and shares are computed; a create whose name folds onto an existing project returns that project (`200`) instead of a second one. |
 | `POST /v1/reports` | `{id, type, range_start, range_end, range_label, project_id?, tag?}` → `202`. The numbers are counted at acceptance; `422 empty_range` when nothing is in scope. |
 | `GET /v1/reports` · `GET /v1/reports/{id}` | The list (no cursor paging yet) and the report document. |
-| `DELETE /v1/reports/{id}` | `204`; its highlights and job go with it. `404` for a missing or someone else's report. A job still writing finds it gone and stops. |
+| `DELETE /v1/reports/{id}` | `204`; its highlights and job go with it. `404` for a missing or someone else's report. A job still counting or writing finds it gone at its next step and stops: no model call after the discard, and an answer already in flight is dropped. |
 | `GET /v1/entries?limit=&cursor=` | `{entries, next_cursor, matched, total}`: every entry in **any** analysis state, newest first by `(recorded_at, id)`. `limit` 1–100, default 100. `cursor` is opaque (base64 of `{"r": recorded_at, "i": id}`), a keyset, so a capture between two page reads shifts nothing. No filters yet, so `matched` = `total` = all the user's entries. |
 | `PATCH /v1/entries/{id}` | Any of `takeaways`, `tags` (bare; normalised; a project's handle or a category name is `400`), `project_id` (`null` unassigns; unknown or someone else's is `404`), `transcript` (becomes the correction, re-derives `word_count`, never re-analyses; blank is `400`), `is_milestone`. An absent key is unchanged; an unknown key is `400`. `409 entry_processing` (retryable) while the entry is pending, transcribing or analysing. Answers the full entry. 1 MB body cap. |
-| `DELETE /v1/entries/{id}` | `204`. Hard delete: the stored audio files first, then the entry, its capture job and audio rows. Reports keep their frozen ids. |
+| `DELETE /v1/entries/{id}` | `204`. Hard delete: the stored audio files first, then the entry, its capture job and audio rows. Reports keep their frozen ids. A capture job still running for it stops at its next step: no further model call, and no failure logged. |
 | `POST /v1/entries/{id}/takeaways` | `{transcript}` → `{takeaways, tags}`. **Writes nothing.** The capture's own writing call (`label_entry` with `analysis.SYSTEM_PROMPT`, the user's projects and tag vocabulary), cleaned the same way; an answer with no takeaway is refused. `503 model_unavailable` (retryable) or `502 model_refused`. |
 | `GET /v1/stats?tz=` | `{streak, total, record_total, branches, this_week, goal, days}` over **complete** notches, on days in `tz`, else `users.time_zone`. `streak`: consecutive days ending today or yesterday, else 0. `this_week`: since Monday 00:00. `total`/`branches`: notches/milestones this calendar year (the tree window, register S3). `record_total`: all time. `days`: 91 booleans, the last today. A `tz` that is not an IANA name is `400`. |
 | `GET /v1/me` · `PATCH /v1/me` | `{id, display_name, email: null, role, industry, years_experience, settings: {weekly_goal, reminder: {enabled, hour, minute, weekdays}, notify_week_recap, notify_report_finished, time_zone}}`. PATCH takes any subset, `settings` and `reminder` partial too; validates (goal 0 or 2–7, hour 0–23, minute 0–59, weekdays 0–6 Sunday-first, an IANA zone); a blank text field clears it; `id`/`email` are read-only; answers the whole object. |
@@ -144,7 +144,7 @@ Python function every connection registers; `users.reminder_weekdays` has no sub
 
 | Check | Result |
 | --- | --- |
-| `pytest` (offline) | 279 passed |
+| `pytest` (offline) | 282 passed |
 | `e2e/run_e2e.py --offline` | 145/145 (Sep 25, with the record section) |
 | `e2e/run_e2e.py` (live, three consecutive runs on Sep 24) | 120/120 each, ~2.5 min, ~$0.06 a run — before the record section; not yet re-run with it |
 

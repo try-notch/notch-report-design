@@ -330,7 +330,8 @@ def _transition(conn, job, state, code=None):
     """
     One step of §3.5's map: the job row and the entry's projection of it. The caller
     holds the transaction. The worker never writes 'queued', and every other job state
-    has the same token on the entry.
+    has the same token on the entry. -> the entries matched: 0 once the notch is
+    deleted (its job row goes with it), which ends the job.
     """
     params = {"state": state, "code": code, "at": store.now(), "job": job["id"],
               "entry": job["entry_id"], "user": job["user_id"]}
@@ -343,8 +344,8 @@ def _transition(conn, job, state, code=None):
                attempts = attempts + (:state = 'transcribing')
          WHERE id = :job
         """, params)
-    conn.execute("UPDATE entries SET analysis_state = :state, analysis_failure_code = :code, updated_at = :at"
-                 " WHERE id = :entry AND user_id = :user", params)
+    return conn.execute("UPDATE entries SET analysis_state = :state, analysis_failure_code = :code, "
+                        "updated_at = :at WHERE id = :entry AND user_id = :user", params).rowcount
 
 
 def _transcribe(conn, job, *, client, transcode, audio_dir):
@@ -369,6 +370,10 @@ def run_capture_job(db_path, job_id, *, client, transcode, audio_dir):
     second submit costs nothing. A job resumed after a crash starts again, but skips
     transcription when the entry already has its raw_text. Audio is read from
     `<audio_dir>/<storage_key>`.
+
+    A notch deleted mid-job (DELETE /v1/entries/{id} or /v1/me) ends it quietly: the next
+    step finds no entry, so no further model call is made, and whatever the delete broke
+    in flight is not logged as a failure.
     """
     conn = store.connect(db_path)
     try:
@@ -378,29 +383,31 @@ def run_capture_job(db_path, job_id, *, client, transcode, audio_dir):
             return
         user_id, entry_id = job["user_id"], job["entry_id"]
         try:
-            with conn:
-                _transition(conn, job, "transcribing")
-            transcript = conn.execute("SELECT raw_text FROM entries WHERE id = ? AND user_id = ?",
-                                      (entry_id, user_id)).fetchone()["raw_text"]
+            with conn:  # read under the transition's write lock, so no delete lands in between
+                if not _transition(conn, job, "transcribing"):
+                    return
+                transcript = conn.execute("SELECT raw_text FROM entries WHERE id = ? AND user_id = ?",
+                                          (entry_id, user_id)).fetchone()["raw_text"]
             if transcript is None:
                 transcript = _transcribe(conn, job, client=client, transcode=transcode, audio_dir=audio_dir)
             # The transcript, and the word count derived from it, are kept even if the analysis then fails.
             with conn:
                 conn.execute("UPDATE entries SET raw_text = coalesce(raw_text, ?), word_count = ? "
                              "WHERE id = ? AND user_id = ?", (transcript, len(transcript.split()), entry_id, user_id))
-                _transition(conn, job, "analyzing")
+                if not _transition(conn, job, "analyzing"):
+                    return  # deleted while it was transcribed: no analysis for a notch that is gone
             project_names, vocabulary = user_context(conn, user_id)
             result = analyze_text(client, transcript, project_names=project_names, vocabulary=vocabulary)
             with conn:
                 apply_analysis(conn, user_id, entry_id, transcript, result)
                 _transition(conn, job, "complete")
         except (ModelError, AudioUnreadable) as exc:
-            log.warning("capture job %s failed: %s (%s)", job_id, exc.code, exc.message)
             with conn:
-                _transition(conn, job, "failed", exc.code)
+                if _transition(conn, job, "failed", exc.code):  # else a delete, not a failure
+                    log.warning("capture job %s failed: %s (%s)", job_id, exc.code, exc.message)
         except Exception:
-            log.exception("capture job %s crashed; failing it as model_unavailable", job_id)
             with conn:
-                _transition(conn, job, "failed", "model_unavailable")
+                if _transition(conn, job, "failed", "model_unavailable"):  # else a delete broke it mid-call
+                    log.exception("capture job %s crashed; failing it as model_unavailable", job_id)
     finally:
         conn.close()

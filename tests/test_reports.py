@@ -13,7 +13,7 @@ from datetime import date
 
 import pytest
 
-from notch_api import contract, store
+from notch_api import contract, reports, store
 from notch_api.config import DEV_USER_ID as DEV
 from notch_api.fakes import FakeClient
 from notch_api.openrouter import ModelUnavailable
@@ -294,6 +294,22 @@ def test_a_report_discarded_while_the_model_writes_is_left_gone(conn, db_path, a
     run_report_job(db_path, job_id, client=Discarding())
     assert conn.execute("SELECT (SELECT count(*) FROM reports) + (SELECT count(*) FROM report_highlights)"
                         " + (SELECT count(*) FROM report_jobs)").fetchone()[0] == 0
+    assert not [r for r in caplog.records if r.levelname in ("WARNING", "ERROR")]  # no crash logged
+
+
+def test_a_report_discarded_while_it_is_counted_asks_the_model_nothing(conn, db_path, fake_client, accepted, caplog,
+                                                                     monkeypatch):
+    report_id, job_id = accepted
+    count = reports._user_message
+
+    def discard_then_count(*args):
+        with conn:  # DELETE /v1/reports/{id} lands while the facts are built; its job row goes with it
+            conn.execute("DELETE FROM reports WHERE id = ?", (report_id,))
+        return count(*args)
+
+    monkeypatch.setattr(reports, "_user_message", discard_then_count)
+    run_report_job(db_path, job_id, client=fake_client)
+    assert fake_client.calls == []
     assert not [r for r in caplog.records if r.levelname in ("WARNING", "ERROR")]  # no crash logged
 
 

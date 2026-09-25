@@ -275,3 +275,23 @@ def test_a_resumed_job_analyses_the_saved_transcript_instead_of_transcribing_aga
     assert sorted(method for method, _ in client.calls) == ["decide", "tool_call"]
     entry = store.load_entry(conn, DEV, "e1")
     assert (entry["analysis_state"], entry["transcript"]) == ("complete", saved)
+
+
+@pytest.mark.parametrize("deleted_during, calls", [
+    ("transcribe", ["transcribe"]),                         # nothing more is asked about a notch that is gone
+    ("tool_call", ["decide", "tool_call", "transcribe"]),   # the analysis in flight ends, and nothing is written
+])
+def test_a_notch_deleted_mid_job_stops_it_quietly(conn, db_path, audio_dir, capture, caplog, deleted_during, calls):
+    job_id = capture("e1", AUDIO)
+
+    class Deleting(FakeClient):
+        def _record(self, method, **kwargs):
+            super()._record(method, **kwargs)
+            if method == deleted_during:
+                with conn:  # DELETE /v1/entries/e1 lands mid-call; its job and audio rows go with it
+                    conn.execute("DELETE FROM entries WHERE id = 'e1'")
+
+    client = Deleting()
+    analysis.run_capture_job(db_path, job_id, client=client, transcode=fake_transcode, audio_dir=audio_dir)
+    assert sorted(method for method, _ in client.calls) == calls
+    assert not [r for r in caplog.records if r.levelname in ("WARNING", "ERROR")]  # a delete is not a crash

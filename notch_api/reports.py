@@ -280,7 +280,8 @@ def run_report_job(db_path, job_id, *, client):
     state its own transaction, the prose, highlights and `complete` in one. A ModelError
     fails the job with its code; anything unexpected is logged and fails it
     `model_unavailable`. It never raises for a model failure: GET /v1/jobs reports it.
-    A job that is already finished, or gone, is left alone.
+    A job that is already finished, or gone, is left alone; one whose report is discarded
+    mid-way (its job row goes with it) stops at its next step, before any model call.
     """
     conn = store.connect(db_path)
     try:
@@ -288,10 +289,11 @@ def run_report_job(db_path, job_id, *, client):
         if job is None or job["state"] in ("complete", "failed"):
             return
         try:
-            with conn:
-                _set_job(conn, job_id, "counting")
-            report = conn.execute("SELECT * FROM reports WHERE id = ? AND user_id = ?",
-                                  (job["report_id"], job["user_id"])).fetchone()
+            with conn:  # read under the transition's write lock, so no discard lands in between
+                if not _set_job(conn, job_id, "counting"):
+                    return
+                report = conn.execute("SELECT * FROM reports WHERE id = ? AND user_id = ?",
+                                      (job["report_id"], job["user_id"])).fetchone()
             entries = conn.execute(
                 """
                 SELECT e.*, p.name AS project_name
@@ -303,7 +305,8 @@ def run_report_job(db_path, job_id, *, client):
             ).fetchall()
             user = _user_message(conn, report, entries)
             with conn:
-                _set_job(conn, job_id, "writing")
+                if not _set_job(conn, job_id, "writing"):
+                    return  # discarded while it was counted: nothing to ask the model for
             report_ids, milestone_ids = (set(store.json_list(report["source_entry_ids"])),
                                          {e["id"] for e in entries if e["is_milestone"]})
             projects = {store.normalize_tag(r["name"]) for r in
@@ -337,10 +340,11 @@ def run_report_job(db_path, job_id, *, client):
 
 
 def _set_job(conn, job_id, state, code=None):
-    """One report_jobs state write. finished_at marks the two terminal states."""
+    """One report_jobs state write -> 1, or 0 once the report is discarded. finished_at marks the terminal states."""
     now = store.now()
-    conn.execute("UPDATE report_jobs SET state = ?, failure_code = ?, finished_at = ?, updated_at = ? WHERE id = ?",
-                 (state, code, now if state in ("complete", "failed") else None, now, job_id))
+    finished = now if state in ("complete", "failed") else None
+    return conn.execute("UPDATE report_jobs SET state = ?, failure_code = ?, finished_at = ?, updated_at = ? "
+                        "WHERE id = ?", (state, code, finished, now, job_id)).rowcount
 
 
 def _user_message(conn, report, entries):
