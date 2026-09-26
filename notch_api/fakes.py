@@ -23,14 +23,25 @@ Knobs: `fail_with` (an exception instance raised by every call while it is set),
 `overrides` ({tool_name or "decide": {field: value}} merged over the canned answer,
 NOT schema-checked, so a test can feed the caller deliberately messy model output),
 and `calls` (every call, in order, as (method, kwargs)).
+
+/v2 binds the client per request, as it does the real one: `bound(deadline=, usage=,
+models=, provider=)` answers the same way and also writes a Usage call per answer
+(`cost` dollars, the provider the fake says served it, a generation id), honours the
+deadline (`delay` seconds per call, cut short by it), and notes each call's model and
+provider block in `routed`. `generation(id)` and `zdr_endpoints()` answer zdr.py from
+what the fake served and its `zdr` list, so a test picks a ZDR hit or a miss by naming
+the provider: stt_provider / jev_provider / chat_provider.
 """
 
+import itertools
 import re
+import time
 
 import jsonschema
 
 from .audio import AudioUnreadable
-from .openrouter import ModelRefused, TranscriptionFailed
+from .config import CHAT_MODEL, JEV_MODEL, STT_MODEL
+from .openrouter import DeadlineExceeded, ModelRefused, TranscriptionFailed
 from .store import normalize_tag
 
 # Audio that starts with this marker transcribes to the UTF-8 text after it, so a
@@ -64,11 +75,39 @@ def fake_transcode(data):
     return data
 
 
+# What the fake's zdr_endpoints() lists: OpenRouter's shape, reduced to what zdr.py reads.
+ZDR_ENDPOINTS = (
+    {"provider": "DeepInfra", "model": "openai/whisper-large-v3"},
+    {"provider": "Groq", "model": "openai/whisper-large-v3"},
+    {"provider": "TypeSafe", "model": "typesafe/jev-1.13-20260917"},
+    {"provider": "DeepInfra", "model": "deepseek/deepseek-v4-pro-0813"},
+)
+
+
 class FakeClient:
-    def __init__(self, *, fail_with=None, overrides=None):
+    def __init__(self, *, fail_with=None, overrides=None, cost=0.001, delay=0.0, stt_provider="DeepInfra",
+                 jev_provider="TypeSafe", chat_provider="DeepInfra", zdr=ZDR_ENDPOINTS):
         self.fail_with = fail_with
         self.overrides = overrides or {}
         self.calls = []
+        self.cost, self.delay = cost, delay
+        self.stt_provider, self.jev_provider, self.chat_provider = stt_provider, jev_provider, chat_provider
+        self.zdr = [dict(e) for e in zdr]
+        self.routed = []            # bound calls: {"method", "model", "provider"}
+        self.generations = {}       # generation id -> {"provider", "model"}
+        self.metadata_calls = []    # ("generation", id) / ("zdr",)
+        self._ids = itertools.count(1)
+
+    def bound(self, *, deadline=None, usage=None, models=None, provider=None):
+        return _BoundFake(self, deadline, usage, models or {}, provider)
+
+    def generation(self, generation_id):
+        self.metadata_calls.append(("generation", generation_id))
+        return self.generations.get(generation_id)
+
+    def zdr_endpoints(self):
+        self.metadata_calls.append(("zdr",))
+        return [dict(e) for e in self.zdr]
 
     def _record(self, method, **kwargs):
         self.calls.append((method, kwargs))
@@ -167,3 +206,48 @@ def _write_report(user):
         ],
         "themes": ["shipped", "pairing", "momentum"],
     }
+
+
+class _BoundFake:
+    """FakeClient.bound(): the same answers, metered and deadline-bound like OpenRouterClient.bound()."""
+
+    def __init__(self, fake, deadline, usage, models, provider):
+        self._fake, self._deadline, self._usage = fake, deadline, usage
+        self._models, self._provider = models, provider
+
+    def _call(self, method, kind, model, provider, answer, measure=lambda result: {}):
+        self._fake.routed.append({"method": method, "model": model, "provider": self._provider})
+        if self._usage is not None:
+            self._usage.reached()
+        if self._fake.delay:
+            left = self._deadline.remaining() if self._deadline is not None else self._fake.delay
+            time.sleep(max(0.0, min(self._fake.delay, left)))
+        if self._deadline is not None and self._deadline.expired():
+            raise DeadlineExceeded("The request's deadline ran out waiting for the model.")
+        result = answer()
+        extra = measure(result)
+        generation_id = f"gen-fake-{next(self._fake._ids)}"
+        self._fake.generations[generation_id] = {"provider": provider, "model": model}
+        if self._usage is not None:
+            self._usage.add({"kind": kind, "model": model, "provider": provider, "generation_id": generation_id,
+                             "cost": self._fake.cost, "prompt_tokens": extra.get("prompt_tokens"),
+                             "completion_tokens": extra.get("completion_tokens"), "seconds": extra.get("seconds")})
+        return result
+
+    def transcribe(self, audio, *, fmt="m4a", language="en"):
+        model = self._models.get("stt", STT_MODEL)
+        # The provider bills what it heard: a word takes the fake about 0.4 s.
+        return self._call("transcribe", "stt", model, self._fake.stt_provider,
+                          lambda: self._fake.transcribe(audio, fmt=fmt, language=language),
+                          lambda text: {"seconds": round(0.4 * len(text.split()), 2)})
+
+    def tool_call(self, **kwargs):
+        model = self._models.get("chat", CHAT_MODEL)
+        return self._call("tool_call", "chat", model, self._fake.chat_provider,
+                          lambda: self._fake.tool_call(**kwargs),
+                          lambda _: {"prompt_tokens": 100, "completion_tokens": 50})
+
+    def decide(self, state, questions):
+        model = self._models.get("classifier", JEV_MODEL)
+        return self._call("decide", "classify", model, self._fake.jev_provider,
+                          lambda: self._fake.decide(state, questions))
