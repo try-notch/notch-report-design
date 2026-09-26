@@ -52,9 +52,10 @@ Nothing in this repo holds a real key, token or password. The real values live o
 1. *Settings → Privacy*: turn on **"Enable ZDR only"**, and leave prompt logging and "OpenRouter
    Use of Inputs/Outputs" **off**.
 2. Create a key for this server only, with a monthly credit limit, for `OPENROUTER_API_KEY`.
-3. Before real audio goes through, get written confirmation that account-level ZDR-only covers
-   `/api/v1/audio/transcriptions` (the server also audits every transcription's provider after
-   the fact and turns capture off on a miss; see "Zero retention" below).
+3. Use only models whose providers are on OpenRouter's ZDR list. That is the owner's decision
+   (2026-09-26), in place of waiting for written confirmation. Transcription and Jev can't carry
+   the per-request ZDR flag, so the server audits each call's provider afterwards and turns that
+   path off on a miss (see "Zero retention" below).
 
 **Apple** (Sign in with Apple token revocation on account deletion):
 1. *Certificates, Identifiers & Profiles → Keys*: a key with Sign in with Apple enabled for the
