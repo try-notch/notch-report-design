@@ -46,7 +46,7 @@ def main(environ=os.environ):
         metrics.path = config.METRICS_PATH  # FakeClient never reaches OpenRouterClient._post, so fakes record nothing
     client = FakeClient() if fake else None
     if fake:
-        logging.getLogger(__name__).info("NOTCH_FAKE_MODELS=1: offline fake models, no OpenRouter calls")
+        logging.getLogger("notch_api.main").info("NOTCH_FAKE_MODELS=1: offline fake models, no OpenRouter calls")
     services = Services.from_env(environ, client=client, audio=FakeAudio() if fake else None)
     app = create_app(db_path=config.DB_PATH, audio_dir=config.AUDIO_DIR, client=client,
                      transcode=fake_transcode if fake else audio.to_m4a_16k, services=services, v1=not prod)

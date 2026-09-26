@@ -291,7 +291,8 @@ def free_port():
 def start_server(run, db_path, audio_dir):
     run.heading("server")
     port = free_port()
-    env = dict(os.environ, NOTCH_DB=db_path, NOTCH_AUDIO_DIR=audio_dir, NOTCH_PORT=str(port), PYTHONUNBUFFERED="1")
+    env = dict(os.environ, NOTCH_DB=db_path, NOTCH_AUDIO_DIR=audio_dir, NOTCH_PORT=str(port), PYTHONUNBUFFERED="1",
+               NOTCH_METER_DB=os.path.join(run.dir, "meter.db"), NOTCH_TMP=os.path.join(run.dir, "tmp"))
     env.pop("NOTCH_FAKE_MODELS", None)  # a stray export must not turn a live run fake
     if run.offline:
         env.update(NOTCH_FAKE_MODELS="1", OPENROUTER_API_KEY="")  # blank, so .env cannot supply one

@@ -48,7 +48,8 @@ DEV_USER_ID = "00000000-0000-4000-8000-000000000001"
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # iOS §5 "Request size", and OpenRouter's own cap
 
-# /v2's one database: metering, accounts, remote config and Notch Cloud ciphertext (meter.py).
-# The rest of /v2's environment is read when the server is built (services.py).
-METER_DB = os.environ.get("NOTCH_METER_DB") or os.path.join(REPO_ROOT, "data", "meter.db")
+# /v2's one database: metering, accounts, remote config and Notch Cloud ciphertext (meter.py),
+# beside /v1's unless placed elsewhere. The rest of /v2's environment is read when the server
+# is built (services.py).
+METER_DB = os.environ.get("NOTCH_METER_DB") or os.path.join(os.path.dirname(DB_PATH), "meter.db")
 AUDIO_RETENTION_DAYS = 7  # E3; schema.sql's purge_after trigger carries the same number
