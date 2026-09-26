@@ -34,6 +34,8 @@ the provider: stt_provider / jev_provider / chat_provider.
 """
 
 import itertools
+import json
+import os
 import re
 import time
 
@@ -42,11 +44,14 @@ import jsonschema
 from .audio import AudioUnreadable
 from .config import CHAT_MODEL, JEV_MODEL, STT_MODEL
 from .openrouter import DeadlineExceeded, ModelRefused, TranscriptionFailed
+from .speech import Probe
 from .store import normalize_tag
 
 # Audio that starts with this marker transcribes to the UTF-8 text after it, so a
 # test chooses its transcript by choosing its upload bytes.
 TEXT_MARKER = b"NOTCH-TEXT:"
+# A /v2 upload FakeAudio reads as a recording: a JSON header line (its length, its pauses), then its words.
+AUDIO_MARKER = b"NOTCH-AUDIO:"
 
 DEFAULT_TRANSCRIPT = (
     "Paired with Dana on the Front-End Refactor this afternoon and we finally shipped "
@@ -66,6 +71,55 @@ _CATEGORY_KEYWORDS = {"wins": ("shipped", "fixed", "merged", "launched"),
                       "challenges": ("flaky", "incident", "stuck", "slog")}
 # Jev probabilities: a keyword hit, over every category's threshold, and no hit, under all of them.
 _HIT, _MISS = 0.9, 0.1
+
+
+def fake_recording(text, seconds=None, silences=(), passthrough=True):
+    """
+    Upload bytes FakeAudio reads as a recording of `text`: `seconds` long (0.4 s a word
+    unless given), with pauses at `silences` [(start, end)], already in the app's own
+    format unless `passthrough` is False.
+    """
+    length = seconds if seconds is not None else max(1.0, round(0.4 * len(text.split()), 2))
+    header = {"seconds": length, "silences": [list(pause) for pause in silences], "passthrough": passthrough}
+    return AUDIO_MARKER + json.dumps(header).encode() + b"\n" + text.encode()
+
+
+class FakeAudio:
+    """
+    Stands in for speech.FFmpeg. A fake_recording() probes as the length and pauses it
+    declares; any other bytes are AudioUnreadable. A piece "encodes" to TEXT_MARKER plus
+    the words spoken inside it (words are spread evenly over the recording), so
+    FakeClient transcribes each piece to exactly its own words and the joined transcript
+    is the recording's text. Like ffmpeg it writes, then removes, its output file.
+    """
+
+    def __init__(self):
+        self.probes, self.encodes = [], []
+
+    @staticmethod
+    def _read(path):
+        with open(path, "rb") as f:
+            data = f.read()
+        if not data.startswith(AUDIO_MARKER):
+            raise AudioUnreadable()
+        header, _, text = data[len(AUDIO_MARKER):].partition(b"\n")
+        return json.loads(header), text.decode("utf-8")
+
+    def probe(self, path, demuxer, deadline=None):
+        header, _ = self._read(path)
+        self.probes.append(demuxer)
+        return Probe(float(header["seconds"]), [tuple(p) for p in header["silences"]], bool(header["passthrough"]))
+
+    def encode(self, path, demuxer, out, start=None, end=None, deadline=None):
+        header, text = self._read(path)
+        with open(out, "wb") as f:
+            f.write(b"encoded")
+        os.remove(out)
+        seconds, words = float(header["seconds"]), text.split()
+        start, end = start or 0.0, seconds if end is None else end
+        spoken = [w for n, w in enumerate(words) if start <= (n + 0.5) * seconds / len(words) < end]
+        self.encodes.append((start, end))
+        return TEXT_MARKER + " ".join(spoken).encode()
 
 
 def fake_transcode(data):
@@ -116,6 +170,8 @@ class FakeClient:
 
     def transcribe(self, audio, *, fmt="m4a", language="en"):
         self._record("transcribe", audio=audio, fmt=fmt, language=language)
+        if audio.startswith(AUDIO_MARKER):  # a fake_recording() sent whole, as the app's own format is
+            audio = TEXT_MARKER + audio.partition(b"\n")[2]
         if not audio.startswith(TEXT_MARKER):
             return DEFAULT_TRANSCRIPT
         text = audio[len(TEXT_MARKER):].decode("utf-8").strip()
