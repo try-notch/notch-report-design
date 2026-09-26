@@ -43,9 +43,11 @@ import jsonschema
 
 from .audio import AudioUnreadable
 from .config import CHAT_MODEL, JEV_MODEL, STT_MODEL
+from .identity import AppleCodeRejected
 from .openrouter import DeadlineExceeded, ModelRefused, TranscriptionFailed
 from .speech import Probe
 from .store import normalize_tag
+from .wire_v2 import Refusal
 
 # Audio that starts with this marker transcribes to the UTF-8 text after it, so a
 # test chooses its transcript by choosing its upload bytes.
@@ -307,3 +309,29 @@ class _BoundFake:
         model = self._models.get("classifier", JEV_MODEL)
         return self._call("decide", "classify", model, self._fake.jev_provider,
                           lambda: self._fake.decide(state, questions))
+
+
+class FakeApple:
+    """Stands in for identity.AppleRevoker: records each code; `reject` or `down` make it refuse."""
+
+    def __init__(self, *, reject=False, down=False):
+        self.codes, self.reject, self.down = [], reject, down
+
+    def revoke(self, code):
+        self.codes.append(code)
+        if self.down:
+            raise Refusal("unavailable")
+        if self.reject:
+            raise AppleCodeRejected()
+
+
+class FakeSupabaseAdmin:
+    """Stands in for identity.SupabaseAdmin: records each deleted user; `down` makes it refuse."""
+
+    def __init__(self, *, down=False):
+        self.deleted, self.down = [], down
+
+    def delete_user(self, user_id):
+        if self.down:
+            raise Refusal("unavailable")
+        self.deleted.append(user_id)

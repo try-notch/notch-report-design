@@ -140,11 +140,24 @@ class Usage:
         with self._lock:
             self._late = on_late
 
+    def close(self, on_late):
+        """
+        Settle: the totals so far, and every reply from now on routed to `on_late`, both
+        under one lock, so no reply is counted twice or missed.
+        """
+        with self._lock:
+            self._late = on_late
+            calls = list(self.calls)
+        return self._sum(calls)
+
     def totals(self):
         """{cost, prompt_tokens, completion_tokens, seconds, models, providers} over every call so far."""
         with self._lock:
             calls = list(self.calls)
+        return self._sum(calls)
 
+    @staticmethod
+    def _sum(calls):
         def total(key):
             values = [c[key] for c in calls if isinstance(c.get(key), (int, float))]
             return sum(values) if values else None

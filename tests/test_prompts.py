@@ -66,7 +66,7 @@ def test_every_variant_resolves_and_unknown_names_do_not():
 
 def test_the_server_runs_without_the_demo_modules():
     """Importing the whole server pulls in none of prompt_variants, seed_db, llm or anthropic."""
-    code = ("import sys; import notch_api.app, notch_api.__main__; "
+    code = ("import sys; import notch_api.app, notch_api.v2, notch_api.cloud, notch_api.admin, notch_api.services, notch_api.__main__; "
             "loaded = {'prompt_variants', 'seed_db', 'llm', 'anthropic', 'matplotlib', 'reportlab'} & set(sys.modules); "
             "print(sorted(loaded)); sys.exit(1 if loaded else 0)")
     done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60)

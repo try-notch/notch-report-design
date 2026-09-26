@@ -17,6 +17,13 @@ list, edit, delete, takeaways and report delete; account_routes: stats and /v1/m
 registered from create_app. Every route reads its bearer and body and writes its
 answer through web.py, so these rules hold wherever a route lives.
 
+/v2 IS MOUNTED BESIDE /v1 when create_app is given `services` (services.py): the
+stateless routes in v2.py and cloud.py, which keep no content. /v1 stores transcripts
+and audio, so it is the development harness only: `v1=False` (NOTCH_ENV=prod) leaves it
+unmounted and creates no content database or audio directory at all. Either way the
+app is wrapped in privacy.Guard, the outermost layer: one scrubbed log line per request,
+and the 500 for any exception answered there, never by uvicorn.
+
 AUTH IS STUBBED: `Bearer dev` is the dev user and anything else is 401. No route
 takes a user id; every query is scoped to the token's user, and a record owned by
 someone else answers exactly like one that does not exist (404), except on create,
@@ -46,8 +53,11 @@ from fastapi.exceptions import RequestValidationError
 from starlette.datastructures import UploadFile
 from starlette.exceptions import HTTPException
 
-from . import account_routes, audio, config, contract, record_routes, reports, store, web, worker
+from fastapi.responses import JSONResponse
+
+from . import account_routes, audio, config, contract, privacy, record_routes, reports, store, web, worker
 from .store import ApiError
+from .wire_v2 import Refusal
 
 log = logging.getLogger(__name__)
 
@@ -125,27 +135,37 @@ def _existing_capture_job(conn, user_id, entry_id):
 # ---------------------------------------------------------------------------
 
 def create_app(*, db_path=config.DB_PATH, audio_dir=config.AUDIO_DIR, client=None,
-               transcode=audio.to_m4a_16k, inline_jobs=False, clock=None):
-    """`clock` -> the current aware instant; stats' "today" reads it, so tests can pin the day."""
+               transcode=audio.to_m4a_16k, inline_jobs=False, clock=None, services=None, v1=True):
+    """
+    `clock` -> the current aware instant; stats' "today" reads it, so tests can pin the day.
+    `services` mounts /v2; `v1=False` leaves the /v1 harness out. Returns the app wrapped
+    in privacy.Guard (which passes attribute access through to the FastAPI app).
+    """
     @asynccontextmanager
     async def lifespan(app):
-        os.makedirs(audio_dir, exist_ok=True)
-        store.init_db(db_path)
-        conn = store.connect(db_path)
-        try:
-            store.ensure_dev_user(conn)
-        finally:
-            conn.close()
-        app.state.runner = worker.JobRunner(
-            db_path, client=client if client is not None else worker.LazyClient(), transcode=transcode,
-            audio_dir=audio_dir, inline=inline_jobs)
-        log.info("resumed %d unfinished job(s)", app.state.runner.resume_pending())
+        if v1:
+            os.makedirs(audio_dir, exist_ok=True)
+            store.init_db(db_path)
+            conn = store.connect(db_path)
+            try:
+                store.ensure_dev_user(conn)
+            finally:
+                conn.close()
+            app.state.runner = worker.JobRunner(
+                db_path, client=client if client is not None else worker.LazyClient(), transcode=transcode,
+                audio_dir=audio_dir, inline=inline_jobs)
+            log.info("resumed %d unfinished job(s)", app.state.runner.resume_pending())
+        if services is not None:
+            log.info("expired %d unsettled call(s)", services.meter.expire_stale())
         try:
             yield
         finally:
-            app.state.runner.shutdown()
+            if v1:
+                app.state.runner.shutdown()
+            if services is not None:
+                services.shutdown()
 
-    app = FastAPI(title="notch_api", lifespan=lifespan)
+    app = FastAPI(title="notch_api", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
     def db():
         conn = store.connect(db_path)
@@ -156,15 +176,22 @@ def create_app(*, db_path=config.DB_PATH, audio_dir=config.AUDIO_DIR, client=Non
 
     # -- errors: one envelope for every non-2xx --------------------------------
 
+    @app.exception_handler(Refusal)
+    async def refused_v2(request, exc):
+        privacy.request_entry(request.scope)["error_code"] = exc.code
+        return JSONResponse(exc.body(), status_code=exc.status, headers=exc.headers())
+
     @app.exception_handler(ApiError)
     async def refused(request, exc):
+        privacy.request_entry(request.scope)["error_code"] = exc.code
         headers = {"WWW-Authenticate": "Bearer"} if exc.status == 401 else None
         return web.envelope(exc.status, exc.code, exc.message, exc.retryable, headers)
 
     @app.exception_handler(HTTPException)
     async def http_error(request, exc):
-        return web.envelope(exc.status_code, _HTTP_CODES.get(exc.status_code, "http_error"), str(exc.detail),
-                         headers=exc.headers)
+        code = _HTTP_CODES.get(exc.status_code, "http_error")
+        privacy.request_entry(request.scope)["error_code"] = code
+        return web.envelope(exc.status_code, code, str(exc.detail), headers=exc.headers)
 
     @app.exception_handler(RequestValidationError)
     async def invalid(request, exc):
@@ -179,7 +206,8 @@ def create_app(*, db_path=config.DB_PATH, audio_dir=config.AUDIO_DIR, client=Non
 
     @app.exception_handler(Exception)
     async def crashed(request, exc):
-        # Starlette still re-raises after this, so the server logs the traceback.
+        # Starlette re-raises after this; privacy.Guard catches it and logs it scrubbed.
+        privacy.request_entry(request.scope)["error_code"] = "internal_error"
         return web.envelope(500, "internal_error", "Something went wrong on the server.")
 
     # -- routes -----------------------------------------------------------------
@@ -188,153 +216,160 @@ def create_app(*, db_path=config.DB_PATH, audio_dir=config.AUDIO_DIR, client=Non
     def healthz():
         return {"ok": True}
 
-    @app.post("/v1/entries")
-    async def create_entry(request: Request, user: str = Depends(web.user)):
-        try:
-            form = await web.capped(request, config.MAX_UPLOAD_BYTES + FORM_SLACK).form(
-                max_files=2, max_fields=16, max_part_size=FORM_SLACK)
-        except HTTPException as exc:
-            # Starlette reads a part with no filename= as a text field, capped at FORM_SLACK.
-            if "exceeded maximum size" not in str(exc.detail):
-                raise
-            raise web.bad("A text part is over 64 KB. Send audio as a file part: its Content-Disposition "
-                       "needs filename=.") from None
-        try:
-            upload, meta = form.get("audio"), form.get("meta")
-            if not isinstance(upload, UploadFile):
-                raise web.bad("The audio part is missing; send it as a file part.")
-            if upload.size > config.MAX_UPLOAD_BYTES:
-                raise web.too_large(config.MAX_UPLOAD_BYTES)
-            if not upload.size:
-                raise web.bad("The recording is empty.")
-            meta = _parse_meta((await meta.read()).decode(errors="replace") if isinstance(meta, UploadFile) else meta)
-            job_id = await run_in_threadpool(accept_entry, user, meta, upload)
-        finally:
-            await form.close()
-        return web.reply("entry_accepted", {"job_id": job_id, "entry_id": meta["id"]}, 202)
-
-    def accept_entry(user, meta, upload):
-        """
-        Idempotent on the entry id (§3.5): a repeat gets the existing job and nothing is
-        stored again. The audio is written first, under its final name by an atomic
-        rename, then the entry, its job and the audio row commit together, so a job
-        never exists without its file.
-        """
-        conn = store.connect(db_path)
-        try:
-            job_id = _existing_capture_job(conn, user, meta["id"])
-            if job_id:
-                return job_id
-            key = f"{user}/{meta['id']}/000"
-            path = os.path.join(audio_dir, key)
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            upload.file.seek(0)
-            with tempfile.NamedTemporaryFile(dir=os.path.dirname(path), delete=False) as f:
-                shutil.copyfileobj(upload.file, f)
-            os.replace(f.name, path)
-            job_id = store.new_id()
+    def mount_v1():
+        @app.post("/v1/entries")
+        async def create_entry(request: Request, user: str = Depends(web.user)):
             try:
-                with conn:
-                    conn.execute("INSERT INTO entries (id, user_id, recorded_at, duration_seconds, capture_mode, "
-                                 "span_start, span_end) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                                 (meta["id"], user, meta["recorded_at"], meta["duration_seconds"], meta["mode"],
-                                  *meta["span"]))
-                    conn.execute("INSERT INTO capture_jobs (id, user_id, entry_id) VALUES (?, ?, ?)",
-                                 (job_id, user, meta["id"]))
-                    conn.execute("INSERT INTO audio_objects (id, user_id, capture_job_id, entry_id, storage_key, "
-                                 "content_type, byte_size, duration_seconds) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                                 (store.new_id(), user, job_id, meta["id"], key,
-                                  upload.content_type or "audio/mp4", upload.size, meta["duration_seconds"]))
-            except sqlite3.IntegrityError:
-                # A concurrent repeat won the insert (and wrote the same file): answer as a repeat.
-                job_id = _existing_capture_job(conn, user, meta["id"])
-                if job_id is None:
+                form = await web.capped(request, config.MAX_UPLOAD_BYTES + FORM_SLACK).form(
+                    max_files=2, max_fields=16, max_part_size=FORM_SLACK)
+            except HTTPException as exc:
+                # Starlette reads a part with no filename= as a text field, capped at FORM_SLACK.
+                if "exceeded maximum size" not in str(exc.detail):
                     raise
-                return job_id
-        finally:
-            conn.close()
-        app.state.runner.submit_capture(job_id)
-        return job_id
-
-    @app.get("/v1/jobs/{job_id}")
-    def get_job(job_id: str, user: str = Depends(web.user), conn=Depends(db)):
-        row = conn.execute(
-            "SELECT entry_id, NULL AS report_id, state, failure_code FROM capture_jobs WHERE id = ? AND user_id = ? "
-            "UNION ALL "
-            "SELECT NULL, report_id, state, failure_code FROM report_jobs WHERE id = ? AND user_id = ?",
-            (job_id, user, job_id, user)).fetchone()
-        if row is None:
-            raise ApiError("not_found", 404, "No such job.")
-        entry_id = row["entry_id"]
-        record = {"entry_id": entry_id} if entry_id else {"report_id": row["report_id"]}
-        if row["state"] == "complete":
-            job = {"status": "complete", **record}
-            if entry_id:
-                job["entry"] = store.load_entry(conn, user, entry_id)
-        elif row["state"] == "failed":
-            job = {"status": "failed", **record, "code": row["failure_code"],
-                   "message": _FAILURE_MESSAGES.get(row["failure_code"], "The job failed."),
-                   # §5: the audio's purge_after, so #c-failed knows whether a retry is still possible.
-                   "retryable_until": store.load_entry(conn, user, entry_id)["retryable_until"] if entry_id else None}
-        else:
-            job = {"status": "processing", **record, "poll_after_ms": POLL_AFTER_MS}
-        return web.reply("job", job)
-
-    @app.get("/v1/entries/{entry_id}")
-    def get_entry(entry_id: str, user: str = Depends(web.user), conn=Depends(db)):
-        entry = store.load_entry(conn, user, entry_id)
-        if entry is None:
-            raise ApiError("not_found", 404, "No such entry.")
-        return web.reply("entry", entry)
-
-    @app.get("/v1/projects")
-    def get_projects(user: str = Depends(web.user), conn=Depends(db)):
-        return web.reply("project_list", {"projects": store.list_projects(conn, user)})
-
-    @app.post("/v1/projects")
-    def create_project(body=Depends(_JSON), user: str = Depends(web.user), conn=Depends(db)):
-        """201 with the client's id, or 200 with the existing project when the folded name is taken (§5)."""
-        project_id, name = (body.get(k) for k in ("id", "name")) if isinstance(body, dict) else (None, None)
-        if not isinstance(project_id, str) or not project_id.strip():
-            raise web.bad("id must be a non-empty string.")
-        if not isinstance(name, str) or not name.strip():
-            raise web.bad("name must be a non-empty string.")
-        existing, status = store.find_project_id(conn, user, name), 200
-        if existing is None:
+                raise web.bad("A text part is over 64 KB. Send audio as a file part: its Content-Disposition "
+                           "needs filename=.") from None
             try:
-                with conn:
-                    conn.execute("INSERT INTO projects (id, user_id, name) VALUES (?, ?, ?)",
-                                 (project_id, user, name.strip()))
-                existing, status = project_id, 201
-            except sqlite3.IntegrityError:
-                # Lost a race for the same folded name (answer with the winner), or the id is taken.
-                existing = store.find_project_id(conn, user, name)
-                if existing is None:
-                    raise ApiError("conflict", 409, "This project id is already in use.") from None
-        project = next(p for p in store.list_projects(conn, user) if p["id"] == existing)
-        return web.reply("project", project, status)
+                upload, meta = form.get("audio"), form.get("meta")
+                if not isinstance(upload, UploadFile):
+                    raise web.bad("The audio part is missing; send it as a file part.")
+                if upload.size > config.MAX_UPLOAD_BYTES:
+                    raise web.too_large(config.MAX_UPLOAD_BYTES)
+                if not upload.size:
+                    raise web.bad("The recording is empty.")
+                meta = _parse_meta((await meta.read()).decode(errors="replace") if isinstance(meta, UploadFile) else meta)
+                job_id = await run_in_threadpool(accept_entry, user, meta, upload)
+            finally:
+                await form.close()
+            return web.reply("entry_accepted", {"job_id": job_id, "entry_id": meta["id"]}, 202)
 
-    @app.post("/v1/reports")
-    def create_report(body=Depends(_JSON), user: str = Depends(web.user), conn=Depends(db)):
-        report_id, job_id, created = reports.accept_report(conn, user, body)
-        if created:
-            app.state.runner.submit_report(job_id)
-        return web.reply("report_accepted", {"job_id": job_id, "report_id": report_id}, 202)
+        def accept_entry(user, meta, upload):
+            """
+            Idempotent on the entry id (§3.5): a repeat gets the existing job and nothing is
+            stored again. The audio is written first, under its final name by an atomic
+            rename, then the entry, its job and the audio row commit together, so a job
+            never exists without its file.
+            """
+            conn = store.connect(db_path)
+            try:
+                job_id = _existing_capture_job(conn, user, meta["id"])
+                if job_id:
+                    return job_id
+                key = f"{user}/{meta['id']}/000"
+                path = os.path.join(audio_dir, key)
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                upload.file.seek(0)
+                with tempfile.NamedTemporaryFile(dir=os.path.dirname(path), delete=False) as f:
+                    shutil.copyfileobj(upload.file, f)
+                os.replace(f.name, path)
+                job_id = store.new_id()
+                try:
+                    with conn:
+                        conn.execute("INSERT INTO entries (id, user_id, recorded_at, duration_seconds, capture_mode, "
+                                     "span_start, span_end) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                                     (meta["id"], user, meta["recorded_at"], meta["duration_seconds"], meta["mode"],
+                                      *meta["span"]))
+                        conn.execute("INSERT INTO capture_jobs (id, user_id, entry_id) VALUES (?, ?, ?)",
+                                     (job_id, user, meta["id"]))
+                        conn.execute("INSERT INTO audio_objects (id, user_id, capture_job_id, entry_id, storage_key, "
+                                     "content_type, byte_size, duration_seconds) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                                     (store.new_id(), user, job_id, meta["id"], key,
+                                      upload.content_type or "audio/mp4", upload.size, meta["duration_seconds"]))
+                except sqlite3.IntegrityError:
+                    # A concurrent repeat won the insert (and wrote the same file): answer as a repeat.
+                    job_id = _existing_capture_job(conn, user, meta["id"])
+                    if job_id is None:
+                        raise
+                    return job_id
+            finally:
+                conn.close()
+            app.state.runner.submit_capture(job_id)
+            return job_id
 
-    @app.get("/v1/reports")
-    def get_reports(user: str = Depends(web.user), conn=Depends(db)):
-        rows = conn.execute("SELECT id, range_label, headline, type, generated_at FROM reports WHERE user_id = ? "
-                            "ORDER BY generated_at DESC, rowid DESC", (user,)).fetchall()
-        return web.reply("report_list", {"reports": [dict(r) for r in rows], "next_cursor": None})
+        @app.get("/v1/jobs/{job_id}")
+        def get_job(job_id: str, user: str = Depends(web.user), conn=Depends(db)):
+            row = conn.execute(
+                "SELECT entry_id, NULL AS report_id, state, failure_code FROM capture_jobs WHERE id = ? AND user_id = ? "
+                "UNION ALL "
+                "SELECT NULL, report_id, state, failure_code FROM report_jobs WHERE id = ? AND user_id = ?",
+                (job_id, user, job_id, user)).fetchone()
+            if row is None:
+                raise ApiError("not_found", 404, "No such job.")
+            entry_id = row["entry_id"]
+            record = {"entry_id": entry_id} if entry_id else {"report_id": row["report_id"]}
+            if row["state"] == "complete":
+                job = {"status": "complete", **record}
+                if entry_id:
+                    job["entry"] = store.load_entry(conn, user, entry_id)
+            elif row["state"] == "failed":
+                job = {"status": "failed", **record, "code": row["failure_code"],
+                       "message": _FAILURE_MESSAGES.get(row["failure_code"], "The job failed."),
+                       # §5: the audio's purge_after, so #c-failed knows whether a retry is still possible.
+                       "retryable_until": store.load_entry(conn, user, entry_id)["retryable_until"] if entry_id else None}
+            else:
+                job = {"status": "processing", **record, "poll_after_ms": POLL_AFTER_MS}
+            return web.reply("job", job)
 
-    @app.get("/v1/reports/{report_id}")
-    def get_report(report_id: str, user: str = Depends(web.user), conn=Depends(db)):
-        report = store.load_report(conn, user, report_id)
-        if report is None:
-            raise ApiError("not_found", 404, "No such report.")
-        return web.reply("report", report)
+        @app.get("/v1/entries/{entry_id}")
+        def get_entry(entry_id: str, user: str = Depends(web.user), conn=Depends(db)):
+            entry = store.load_entry(conn, user, entry_id)
+            if entry is None:
+                raise ApiError("not_found", 404, "No such entry.")
+            return web.reply("entry", entry)
 
-    record_routes.register(app, db=db, audio_dir=audio_dir)
-    account_routes.register(app, db=db, audio_dir=audio_dir,
-                            clock=clock or (lambda: datetime.now(timezone.utc)))
-    return app
+        @app.get("/v1/projects")
+        def get_projects(user: str = Depends(web.user), conn=Depends(db)):
+            return web.reply("project_list", {"projects": store.list_projects(conn, user)})
+
+        @app.post("/v1/projects")
+        def create_project(body=Depends(_JSON), user: str = Depends(web.user), conn=Depends(db)):
+            """201 with the client's id, or 200 with the existing project when the folded name is taken (§5)."""
+            project_id, name = (body.get(k) for k in ("id", "name")) if isinstance(body, dict) else (None, None)
+            if not isinstance(project_id, str) or not project_id.strip():
+                raise web.bad("id must be a non-empty string.")
+            if not isinstance(name, str) or not name.strip():
+                raise web.bad("name must be a non-empty string.")
+            existing, status = store.find_project_id(conn, user, name), 200
+            if existing is None:
+                try:
+                    with conn:
+                        conn.execute("INSERT INTO projects (id, user_id, name) VALUES (?, ?, ?)",
+                                     (project_id, user, name.strip()))
+                    existing, status = project_id, 201
+                except sqlite3.IntegrityError:
+                    # Lost a race for the same folded name (answer with the winner), or the id is taken.
+                    existing = store.find_project_id(conn, user, name)
+                    if existing is None:
+                        raise ApiError("conflict", 409, "This project id is already in use.") from None
+            project = next(p for p in store.list_projects(conn, user) if p["id"] == existing)
+            return web.reply("project", project, status)
+
+        @app.post("/v1/reports")
+        def create_report(body=Depends(_JSON), user: str = Depends(web.user), conn=Depends(db)):
+            report_id, job_id, created = reports.accept_report(conn, user, body)
+            if created:
+                app.state.runner.submit_report(job_id)
+            return web.reply("report_accepted", {"job_id": job_id, "report_id": report_id}, 202)
+
+        @app.get("/v1/reports")
+        def get_reports(user: str = Depends(web.user), conn=Depends(db)):
+            rows = conn.execute("SELECT id, range_label, headline, type, generated_at FROM reports WHERE user_id = ? "
+                                "ORDER BY generated_at DESC, rowid DESC", (user,)).fetchall()
+            return web.reply("report_list", {"reports": [dict(r) for r in rows], "next_cursor": None})
+
+        @app.get("/v1/reports/{report_id}")
+        def get_report(report_id: str, user: str = Depends(web.user), conn=Depends(db)):
+            report = store.load_report(conn, user, report_id)
+            if report is None:
+                raise ApiError("not_found", 404, "No such report.")
+            return web.reply("report", report)
+
+        record_routes.register(app, db=db, audio_dir=audio_dir)
+        account_routes.register(app, db=db, audio_dir=audio_dir,
+                                clock=clock or (lambda: datetime.now(timezone.utc)))
+
+    if v1:
+        mount_v1()
+    if services is not None:
+        from . import v2
+        v2.register(app, services)
+    return privacy.Guard(app)
