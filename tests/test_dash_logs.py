@@ -220,3 +220,18 @@ def test_a_poller_keeps_its_last_good_value_until_it_is_too_old():
     poller.refresh()
     assert (poller.current(now[0]), poller.read_at, poller.error) == ({"n": 1}, 0.0, "couldn’t connect")
     assert poller.current(31.0) is None
+
+
+def test_notch_apis_scrubbed_json_lines_are_read_too():
+    from notch_dash.logs import ServerLog
+
+    log = ServerLog()
+    started = log.feed('{"ts": "2026-09-26T22:32:26.230Z", "level": "INFO", "logger": "notch_api.app", '
+                       '"event": "resumed %d unfinished job(s)"}', now=0)
+    assert started is None and log.started_at == 1790461946.23
+    err = log.feed('{"ts": "2026-09-26T22:33:00.000Z", "level": "ERROR", "logger": "notch_api.guard", '
+                   '"event": "unhandled_exception", "exc_type": "RuntimeError", "frames": ["a.py:1:f"]}', now=0)
+    assert (err.level, err.where, err.message) == ("ERROR", "notch_api.guard", "unhandled_exception [RuntimeError]")
+    assert log.feed('{"ts": "2026-09-26T22:33:01.000Z", "level": "INFO", "logger": "notch_api.request", '
+                    '"event": "request", "status": 200}', now=0) is None
+    assert log.feed('{"not": "a log line"}', now=0) is None

@@ -136,6 +136,13 @@ class ServerLog:
         self.started_at = self._last_at = self._open = None
 
     def feed(self, line, now, following=False):
+        if line.startswith("{") and (parsed := _json_line(line)) is not None:
+            # notch_api's scrubbed JSON lines (privacy.py): the event is a template, never content.
+            at, level, where, message = parsed
+            self._last_at, self._open = at, None
+            if where == "notch_api.app" and message.startswith("resumed "):
+                self.started_at = at
+            return self._error(at, level, where, message, line) if level in LEVELS else None
         if m := _STAMPED.match(line):
             at = datetime.strptime(m[1], "%Y-%m-%d %H:%M:%S").timestamp() + int(m[2]) / 1000  # local time
             level, where, message = m[3], m[4], m[5]
@@ -178,6 +185,20 @@ class TunnelLog:
             at = datetime.strptime(m[1], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc).timestamp()
             return Err(at, m[2], None, redact(_FIELDS.sub("", m[3]).strip()), [redact(line, 1000)])
         return None
+
+
+def _json_line(line):
+    """A scrubbed notch_api line -> (at, level, logger, event [exception type]), or None if it is not one."""
+    try:
+        data = json.loads(line)
+        at = datetime.strptime(data["ts"], "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc).timestamp()
+    except (ValueError, KeyError, TypeError):
+        return None
+    level, where, event = data.get("level"), data.get("logger"), data.get("event")
+    if not all(isinstance(v, str) for v in (level, where, event)):
+        return None
+    kind = data.get("exc_type") if isinstance(data.get("exc_type"), str) else None
+    return at, level, where, f"{event} [{kind}]" if kind else event
 
 
 def _exception(lines):

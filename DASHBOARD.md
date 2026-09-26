@@ -48,6 +48,8 @@ NOTCH_DASH_GATE_SECRET_FILE=/path/to/gate-secret \
 | `NOTCH_DASH_GATE_SECRET_FILE` | off | A file holding the 48-lowercase-hex gate secret. It turns on the end-to-end probe. |
 | `NOTCH_DASH_DEVICE` | `00008150-000261540203401C` | The phone's hardware UDID for `devicectl`. |
 | `OPENROUTER_API_KEY` | read from `.env` (loaded when `notch_api.config` is imported) | Used only for `GET /api/v1/key` (spend). |
+| `NOTCH_DASH_HOSTS` | none | Extra `Host` values to answer, comma-separated. On the VPS: the machine's tailnet name (`<machine>.<tailnet>.ts.net`), which `tailscale serve` passes through. |
+| `NOTCH_DASH_TAILNET` | off | `1` trusts Tailscale's address ranges (`100.64.0.0/10`, `fd7a:115c:a1e0::/48`) in `X-Forwarded-For`, where `tailscale serve` names the tailnet device it was reached from. Only for a machine where nothing but `tailscale serve` can reach the dashboard (DEPLOY.md). |
 
 ## Sources and cadence
 
@@ -588,6 +590,7 @@ For each check, the backend evaluates the rules top to bottom, and the first mat
   - It binds to 127.0.0.1 only.
   - **This Mac only, even through Caddy:** Caddy listens on `*:80`, and its `dash.notch.localhost` site has no `bind`, so any device on the same network can reach it by sending that Host to the Mac's LAN address. A request whose `X-Forwarded-For` holds anything but loopback addresses (or can't be read) gets a 403. Caddy sets that header to the address it was reached from and drops a client's own value, so it can't be forged from the network; a request straight to 127.0.0.1:4130 has none.
   - **Still to do outside this repo:** add `bind 127.0.0.1 [::1]` to the `http://dash.notch.localhost` site in the Caddyfile, and to `http://api.notch.localhost`, which serves the API to the network the same way.
+  - **On the VPS** it is reached only through `tailscale serve` (DEPLOY.md), which forwards from the tailnet device's address and keeps the tailnet `Host`; `NOTCH_DASH_TAILNET=1` and `NOTCH_DASH_HOSTS` admit exactly those. Nothing else there listens for it: no Caddy site, and uvicorn binds 127.0.0.1.
   - **Host allow-list:** `dash.notch.localhost`, `127.0.0.1:<port>` and `localhost:<port>`. Any other Host gets a 421, which defends against DNS rebinding. The allowed hosts are a `Settings` field, so tests can add `testserver`, and a future mount under `/<gate>/dash/` would add `notch-gate.localhost`.
   - Only GET and HEAD are served.
   - `FastAPI(docs_url=None, redoc_url=None, openapi_url=None)`.
