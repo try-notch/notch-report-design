@@ -1,0 +1,42 @@
+# The /v2 API as a container. The host's Caddy terminates HTTPS and proxies to
+# 127.0.0.1:${NOTCH_HOST_PORT:-4131}. Secrets come from .env and the Apple key from
+# secrets/apple-signin.p8; both are gitignored and copied to the VPS with scp.
+# DEPLOY.md › "Run it as a container".
+#
+#   docker compose up -d --build                        # the VPS: prod, port 4131
+#   NOTCH_ENV=dev NOTCH_HOST_PORT=4175 docker compose up --build   # the Mac: api.notch.localhost
+services:
+  api:
+    build: .
+    image: notch-api:latest
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false                        # prod still refuses to start without its secrets
+    environment:
+      NOTCH_ENV: ${NOTCH_ENV:-prod}
+      NOTCH_FAKE_MODELS: ${NOTCH_FAKE_MODELS:-}  # 1 = offline doubles; refused in prod
+      NOTCH_DEV_AUTH: ${NOTCH_DEV_AUTH:-}        # 1 = `Bearer dev`; refused in prod
+      NOTCH_HOST: 0.0.0.0
+      NOTCH_PORT: "4131"
+      NOTCH_METER_DB: /data/meter.db
+      NOTCH_TMP: /tmp/notch
+      NOTCH_METRICS: /data/metrics.jsonl       # metadata only: one line per model call
+      NOTCH_DB: /data/v1.db                    # /v1 exists only when NOTCH_ENV isn't prod
+      NOTCH_AUDIO_DIR: /data/v1-audio
+      APPLE_PRIVATE_KEY_PATH: /run/notch-secrets/apple-signin.p8
+    ports:
+      - "127.0.0.1:${NOTCH_HOST_PORT:-4131}:4131"
+    volumes:
+      - meter:/data
+      - ./secrets:/run/notch-secrets:ro
+    tmpfs:
+      - /tmp/notch:size=512m,mode=0700,uid=10001,gid=10001
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    mem_limit: 3g
+
+volumes:
+  meter:

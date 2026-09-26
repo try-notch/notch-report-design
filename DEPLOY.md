@@ -110,6 +110,47 @@ sudo -e /etc/notch/notch.env        # replace every <placeholder>
 sudo install -o root -g notch -m 0640 /path/to/AuthKey_XXXX.p8 /etc/notch/apple-signin.p8
 ```
 
+## 3b. Run it as a container (the owner's chosen path)
+
+Test on the Mac first, then ship the same image to the VPS. Only two files hold secrets, and
+both are gitignored and never committed:
+- `.env` in the repo root: every key from `deploy/notch.env.example`, except the paths and
+  ports that `compose.yaml` sets itself;
+- `secrets/apple-signin.p8`.
+
+**On the Mac:**
+```bash
+NOTCH_ENV=dev NOTCH_HOST_PORT=4175 docker compose up --build
+```
+- The Mac's Caddy serves it at `http://api.notch.localhost`, which points at 4175.
+- With no secrets yet, add `NOTCH_FAKE_MODELS=1 NOTCH_DEV_AUTH=1`. The fakes accept only
+  `fakes.fake_recording()` audio; real audio comes back as `audio_unreadable`.
+- Don't run it while another local server holds 4175.
+
+**On the VPS**, once the Mac run looks right:
+1. Install Docker from Ubuntu's own packages, then stop the systemd service:
+   `sudo apt-get install -y docker.io docker-compose-v2`, then
+   `sudo systemctl disable --now notch-api`.
+   Caddy, the firewall and the dashboard from `setup.sh` stay as they are. Caddy keeps
+   proxying `api.trynotch.xyz` to `127.0.0.1:4131`, which is where the container listens.
+2. Copy the code, then the two secret files:
+   `rsync -az Dockerfile compose.yaml .dockerignore requirements-server.txt notch_api notch_dash ubuntu@<vps>:notch/`
+   `ssh ubuntu@<vps> 'mkdir -p notch/secrets'`
+   `scp .env ubuntu@<vps>:notch/.env`
+   `scp secrets/apple-signin.p8 ubuntu@<vps>:notch/secrets/`
+3. Lock the secrets down so only the container's user (uid 10001) can read the key, then start:
+   `ssh ubuntu@<vps> 'cd notch && chmod 600 .env && sudo chown 10001:10001 secrets/apple-signin.p8 && sudo chmod 400 secrets/apple-signin.p8 && sudo docker compose up -d --build'`
+4. Check it: `ssh ubuntu@<vps> 'curl -s 127.0.0.1:4131/healthz && sudo docker compose -f notch/compose.yaml ps'`.
+
+**What the container enforces:**
+- it runs as a non-root user, on a read-only root filesystem, with no capabilities;
+- ffmpeg works in a 512 MB tmpfs at `/tmp/notch`;
+- the meter database and the metadata-only metrics sit in the `meter` volume;
+- it's capped at 3 GB of memory.
+
+Roll back by checking out the previous commit and running `docker compose up -d --build`
+again. The volume keeps the database.
+
 ## 4. Deploy the code
 
 From the repo root on the Mac, with the server changes committed:

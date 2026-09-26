@@ -6,3 +6,7 @@ notch.db
 output/
 data/
 e2e/runs/
+
+# Keys that must never be committed: the Apple Sign in key and anything beside it.
+secrets/
+*.p8
