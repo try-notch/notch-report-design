@@ -61,6 +61,10 @@ ERRORS = {
 }
 
 
+# Seconds of Retry-After for a 429 or 503 raised without its own (the contract puts one on every 429 and 503).
+DEFAULT_RETRY_AFTER = {"unavailable": 5, "rate_limited": 5, "processing_paused": 300, "feature_disabled": 3600}
+
+
 class Refusal(Exception):
     """A /v2 answer that is not a 2xx: one of ERRORS, with Retry-After and resets_at when they apply."""
 
@@ -69,6 +73,8 @@ class Refusal(Exception):
         super().__init__(code)
         self.code, self.status, self.retryable = code, status, retryable
         self.message = message or default
+        if retry_after is None and status in (429, 503):
+            retry_after = DEFAULT_RETRY_AFTER.get(code, 60)
         self.retry_after, self.resets_at = retry_after, resets_at
 
     def body(self):

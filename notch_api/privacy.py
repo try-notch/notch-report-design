@@ -93,7 +93,7 @@ def install_logging(level=logging.INFO, stream=None):
         logger.setLevel(level)
     access = logging.getLogger("uvicorn.access")
     access.handlers, access.propagate, access.disabled = [], False, True
-    for name in ("httpx", "httpcore"):
+    for name in ("httpx", "httpx2", "httpcore"):   # at INFO they log every URL
         logging.getLogger(name).setLevel(logging.WARNING)
     return handler
 
