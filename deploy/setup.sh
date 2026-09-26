@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# deploy/setup.sh — prepare an Ubuntu 24.04 VPS for notch_api. Run it on the VPS through
+# deploy/setup.sh — prepare an Ubuntu 24.04 or later VPS (OVH ships 26.04) for notch_api. Run it on the VPS through
 # sudo, from a copy of this deploy/ folder (as the image's `ubuntu` user, say):
 #
 #   sudo bash notch-deploy/setup.sh
@@ -50,7 +50,7 @@ install -d -o root -g notch -m 0750 "$conf"
 
 say "tmpfs for NOTCH_TMP"
 install -d -o notch -g notch -m 0700 "$tmpfs"
-line="tmpfs $tmpfs tmpfs rw,nosuid,nodev,noexec,size=$tmpfs_size,mode=0700,uid=$(id -u notch),gid=$(id -g notch) 0 0"
+line="tmpfs $tmpfs tmpfs rw,nosuid,nodev,noexec,nofail,size=$tmpfs_size,mode=0700,uid=$(id -u notch),gid=$(id -g notch) 0 0"
 if ! grep -qE "^tmpfs[[:space:]]+$tmpfs[[:space:]]" /etc/fstab; then
   echo "$line" >> /etc/fstab
   systemctl daemon-reload
