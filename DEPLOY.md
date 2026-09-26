@@ -1,6 +1,6 @@
 # Deploying notch_api to the VPS
 
-The production server is one Hetzner VPS in Ashburn, VA, running Ubuntu 24.04. It serves the
+The production server is one VPS (OVHcloud, US East) running Ubuntu 24.04. It serves the
 stateless `/v2` API at `https://api.trynotch.xyz`
 (`docs/backend-contract.md` in notch-ios-dev is the wire). `/v1`, the development harness,
 is never mounted there: it stores transcripts and audio, and the server keeps no readable
@@ -10,7 +10,7 @@ content.
 iPhone ── HTTPS ──▶ Caddy :443 (api.trynotch.xyz, TLS, 30 MB body cap, no access log)
                       └─▶ notch_api 127.0.0.1:4131  (systemd: notch-api, user notch)
                             ├─ /var/lib/notch/meter.db   metering, accounts, config, Notch Cloud ciphertext
-                            ├─ /var/lib/notch/tmp        tmpfs: ffmpeg's per-request directories
+                            ├─ /var/lib/notch/tmp        tmpfs (512 MB ceiling): ffmpeg's per-request directories
                             └─▶ OpenRouter, Supabase JWKS / admin API, Apple
 
 Your devices ── tailnet ──▶ tailscale serve (https://<machine>.<tailnet>.ts.net)
@@ -66,33 +66,39 @@ makes every pending retry look like a reused key (409 `idempotency_key_reused`).
 
 ## 2. The machine (owner only)
 
-1. Create the VPS in Hetzner Cloud: location **Ashburn (ash)**, image **Ubuntu 24.04**, your SSH
-   key, IPv4 and IPv6. A shared-vCPU plan with at least 4 GB of RAM (CPX21 or larger; the US
-   locations sell the CPX line) leaves room for the 1 GB tmpfs ceiling.
-2. DNS: `A` (and `AAAA`) records for `api.trynotch.xyz` to the VPS's addresses. Caddy cannot get
-   a certificate until they resolve.
-3. Log in as root once, make a sudo user for deploys, and put your SSH key on it:
+1. Order the VPS from OVHcloud in a **US East** location: **VPS-1** (2 vCores, 4 GB RAM, 40 GB
+   NVMe) is enough, with image **Ubuntu 24.04** and your SSH key. OVH's Ubuntu image logs in as
+   `ubuntu`, with your key installed and passwordless `sudo`; every step below uses that user.
+2. DNS: `A` (and `AAAA`, if the VPS has IPv6) records for `api.trynotch.xyz` to the VPS's
+   addresses. Caddy cannot get a certificate until they resolve.
+3. Check you can get in and use sudo without a password (`deploy.sh` runs `sudo` over SSH
+   without a terminal):
    ```bash
-   adduser --disabled-password --gecos "" deploy && usermod -aG sudo deploy
-   install -d -m 700 -o deploy -g deploy ~deploy/.ssh && cp ~/.ssh/authorized_keys ~deploy/.ssh/
-   chown deploy:deploy ~deploy/.ssh/authorized_keys
-   echo "deploy ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/deploy && chmod 440 /etc/sudoers.d/deploy
+   ssh ubuntu@<vps address> 'sudo -n true && echo ok'
    ```
-   (`deploy.sh` runs `sudo` over SSH without a terminal, so it needs `NOPASSWD`. Narrow it to
-   `rsync`, `tee`, `cp`, `rm`, `systemctl`, `journalctl` and `/opt/notch/venv/bin/*` if you prefer.)
+   If it asks for a password, give `ubuntu` a sudoers drop-in:
+   `echo "ubuntu ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/90-ubuntu && sudo chmod 440 /etc/sudoers.d/90-ubuntu`.
+
+**Sized for 2 vCPU and 4 GB.** One uvicorn process, by design: the per-account in-flight
+count and the config cache live in it. ffmpeg, the only CPU-heavy step, runs single-threaded,
+and at most `transcribe_concurrency` (2, remote config) transcriptions decode and transcribe
+at once; a third waits up to 10 s for a slot, then is 503 `unavailable` with `Retry-After`.
+Model calls are network-bound and share a 16-thread pool. A transcription holds about 100 MB
+of memory at its peak; `notch-api` may use at most 75% of RAM (`MemoryMax`), and the tmpfs is
+capped at 512 MB. On a bigger machine, raise `transcribe_concurrency` with a config push.
 
 ## 3. Set the machine up
 
 From the Mac, copy `deploy/` over and run `setup.sh`:
 
 ```bash
-rsync -az deploy/ deploy@<vps address>:notch-deploy/
-ssh deploy@<vps address> 'sudo bash notch-deploy/setup.sh'
+rsync -az deploy/ ubuntu@<vps address>:notch-deploy/
+ssh ubuntu@<vps address> 'sudo bash notch-deploy/setup.sh'
 ```
 
 It installs ffmpeg, Python's venv, sqlite3, ufw and Caddy; creates the `notch` user,
 `/opt/notch/{app,venv}`, `/var/lib/notch` (0700) and `/etc/notch` (0750, root:notch); mounts a
-1 GB tmpfs at `/var/lib/notch/tmp` from `/etc/fstab` (0700, owned by `notch`, `noexec`); installs
+512 MB tmpfs at `/var/lib/notch/tmp` from `/etc/fstab` (0700, owned by `notch`, `noexec`); installs
 the units, the Caddyfile and `notch-admin`; and turns on ufw with only 22/tcp, 80/tcp, 443/tcp and
 443/udp open. Run it again whenever `deploy/` changes; it keeps `/etc/notch/*.env`.
 
@@ -108,7 +114,7 @@ sudo install -o root -g notch -m 0640 /path/to/AuthKey_XXXX.p8 /etc/notch/apple-
 From the repo root on the Mac, with the server changes committed:
 
 ```bash
-NOTCH_VPS=deploy@<vps address> deploy/deploy.sh
+NOTCH_VPS=ubuntu@<vps address> deploy/deploy.sh
 ```
 
 It runs the offline suite, ships `notch_api/`, `notch_dash/` and `requirements-server.txt`
@@ -123,7 +129,7 @@ to start without `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `NOTCH_TMP` and a 32+ ch
 **Roll back** to the release before:
 
 ```bash
-ssh deploy@<vps address> 'sudo rsync -a --delete /opt/notch/app.previous/ /opt/notch/app/ && sudo systemctl restart notch-api notch-dash'
+ssh ubuntu@<vps address> 'sudo rsync -a --delete /opt/notch/app.previous/ /opt/notch/app/ && sudo systemctl restart notch-api notch-dash'
 ```
 
 or check out an older commit on the Mac and run `deploy.sh` again.
@@ -133,7 +139,7 @@ or check out an older commit on the Mac and run `deploy.sh` again.
 ```bash
 curl -s https://api.trynotch.xyz/healthz                                   # {"ok":true}
 curl -s -H 'X-Client: ios/1.0.0+1' https://api.trynotch.xyz/v2/config      # the public config
-ssh deploy@<vps address> 'sudo journalctl -u notch-api -n 20 --no-pager'   # one JSON line per request
+ssh ubuntu@<vps address> 'sudo journalctl -u notch-api -n 20 --no-pager'   # one JSON line per request
 ```
 
 A signed-in check needs a real Supabase session token: sign in from a TestFlight build and

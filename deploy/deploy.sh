@@ -2,7 +2,7 @@
 # deploy/deploy.sh — ship this checkout's server to the VPS and restart it. Run on the Mac,
 # from the repo root:
 #
-#   NOTCH_VPS=<sudo user>@<vps address> deploy/deploy.sh
+#   NOTCH_VPS=ubuntu@<vps address> deploy/deploy.sh
 #
 # It refuses to ship uncommitted server code, runs the offline test suite, copies
 # notch_api/, notch_dash/ and requirements-server.txt (nothing else: no .env, no data/, no
@@ -10,10 +10,11 @@
 # the requirements, restarts both services and checks /healthz. The previous release is kept
 # at /opt/notch/app.previous; DEPLOY.md says how to roll back to it.
 #
-# NOTCH_VPS must be the VPS. This script has no default host, on purpose.
+# NOTCH_VPS must be the VPS, as a user with passwordless sudo (the image's `ubuntu` user).
+# This script has no default host, on purpose.
 set -euo pipefail
 
-: "${NOTCH_VPS:?set NOTCH_VPS=<sudo user>@<vps address>}"
+: "${NOTCH_VPS:?set NOTCH_VPS=ubuntu@<vps address>}"
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 shipped=(notch_api notch_dash requirements-server.txt)
 

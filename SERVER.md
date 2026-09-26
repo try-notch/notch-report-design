@@ -5,7 +5,8 @@ Two APIs in one process:
 - **`/v2`, the production API** (`docs/backend-contract.md` in notch-ios-dev, accepted
   2026-09-26). Stateless: every call is synchronous, its response carries the whole result,
   and the server keeps no readable content. The device is the system of record. It runs on
-  the VPS at `https://api.trynotch.xyz`; [DEPLOY.md](DEPLOY.md) has every step.
+  the VPS (OVHcloud, US East) at `https://api.trynotch.xyz`, sized for 2 vCPU and 4 GB;
+  [DEPLOY.md](DEPLOY.md) has every step.
 - **`/v1`, the development harness** (§3/§5 of `docs/data-and-backend-integration.md`): the
   server of record the Debug build still talks to until cutover. It stores transcripts and
   audio, so it is never mounted when `NOTCH_ENV=prod`.
@@ -79,7 +80,8 @@ and resets the profile and settings to their defaults. The user row stays.
 **Every processing call** goes: headers (400) → token (401) → account (403 `account_gone` /
 `account_blocked`) → app version (426) → switches (503 `processing_paused` /
 `feature_disabled`) → the account's calls in this process (429 `rate_limited`) → the body,
-read with a cap (413, 415, 400) → for audio, the decode (422, 413 `audio_too_long`) →
+read with a cap (413, 415, 400) → for audio, one of `transcribe_concurrency` (2) slots in the
+process (503 `unavailable` after waiting up to 10 s), then the decode (422, 413 `audio_too_long`) →
 check-and-start (409, 429, 503) → the models, under the deadline (502, 422, 504) → settle →
 the response, validated against the enums of the client's contract version (from `X-Client`).
 The error envelope is `{"error": {code, message, retryable}}` (+ `resets_at` on

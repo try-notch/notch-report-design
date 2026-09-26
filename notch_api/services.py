@@ -54,7 +54,8 @@ class Services:
     apple: AppleRevoker | None = None
     supabase_admin: SupabaseAdmin | None = None
     prod: bool = False
-    executor: ThreadPoolExecutor = field(default_factory=lambda: ThreadPoolExecutor(32, thread_name_prefix="notch-v2"))
+    # Model calls are network-bound; ffmpeg's CPU is capped separately (transcribe_concurrency).
+    executor: ThreadPoolExecutor = field(default_factory=lambda: ThreadPoolExecutor(16, thread_name_prefix="notch-v2"))
 
     def body_hmac(self, body):
         return hmac.new(self.body_key, body, hashlib.sha256).digest()

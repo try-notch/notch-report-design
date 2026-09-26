@@ -18,7 +18,8 @@ ONE PATH FOR EVERY PROCESSING CALL, in this order, each step able to refuse:
   headers (400) -> token (401) -> account (403 gone / blocked) -> app version (426) ->
   processing switch (503 processing_paused) -> feature (503 feature_disabled) -> calls
   this process is running for the account (429 rate_limited) -> the body, read with a
-  cap (413, 415, 400) -> for audio, decode it (422, 413 audio_too_long) ->
+  cap (413, 415, 400) -> for audio, a transcription slot (Slots: 503 unavailable when
+  none frees up in time), then decode it (422, 413 audio_too_long) ->
   check-and-start (meter.py: 409, 429, 503) -> the models, under the deadline (502,
   422, 504) -> settle -> the response, checked against the enums of the client's
   contract version.
@@ -179,6 +180,43 @@ class InFlight:
             self._running.pop(user_id, None)
 
 
+class Slots:
+    """
+    At most remote config's `transcribe_concurrency` transcriptions decode and transcribe at
+    once in this process: ffmpeg is the one CPU-heavy step, and the VPS has two cores. A
+    call over the limit waits for a slot (at most `TRANSCRIBE_WAIT` seconds, and never past
+    half its deadline), then is 503 unavailable, which the app retries after Retry-After.
+    """
+
+    def __init__(self):
+        self._loop = self._changed = None
+        self.busy = 0
+
+    def _condition(self):
+        loop = asyncio.get_running_loop()
+        if self._loop is not loop:   # a new event loop (only ever in tests): nothing from the old one is running
+            self._loop, self._changed, self.busy = loop, asyncio.Condition(), 0
+        return self._changed
+
+    async def acquire(self, limit, wait):
+        changed = self._condition()
+        async with changed:
+            try:
+                await asyncio.wait_for(changed.wait_for(lambda: self.busy < limit), timeout=wait)
+            except asyncio.TimeoutError:
+                raise Refusal("unavailable", retry_after=5) from None
+            self.busy += 1
+
+    async def release(self):
+        changed = self._condition()
+        async with changed:
+            self.busy -= 1
+            changed.notify_all()
+
+
+TRANSCRIBE_WAIT = 10.0
+
+
 class Caller:
     """The verified caller of one request: X-Client, the principal, the account, the config it runs under."""
 
@@ -199,6 +237,7 @@ class V2:
     def __init__(self, services):
         self.s = services
         self.inflight = InFlight()
+        self.transcribing = Slots()
 
     async def caller(self, request, *, required=True, account=True):
         client = wire_v2.Client.parse(request.headers.get("x-client"))
@@ -237,7 +276,7 @@ class V2:
         usage, outcome, extras = Usage(), {"ok": False, "code": None}, {}
         try:
             bound = s.client.bound(deadline=deadline, usage=usage, models=cfg["models"], provider=cfg["provider"])
-            future = asyncio.get_running_loop().run_in_executor(s.executor, work, bound, extras)
+            future = _abandonable(asyncio.get_running_loop().run_in_executor(s.executor, work, bound, extras))
             try:
                 result = await asyncio.wait_for(asyncio.shield(future), timeout=max(deadline.remaining(), 0) + GRACE)
             except asyncio.TimeoutError:
@@ -272,16 +311,21 @@ class V2:
     # -- GET /v2/config ----------------------------------------------------------
 
     async def config(self, request: Request):
-        caller = await self.caller(request, required=False)
-        entry = request_entry(request.scope)
-        entry["kind"] = "config"
-        body = caller.cfg.public(caller.features)
-        if caller.principal is not None:
-            await run_in_threadpool(self.s.meter.mark_active, caller.user_id, caller.client.app_version,
-                                    caller.client.platform)
-            body["usage"] = await run_in_threadpool(self.s.meter.usage_today, caller.user_id)
-        wire_v2.validate("config", body, caller.client)
-        return JSONResponse(body)
+        async def answer():
+            caller = await self.caller(request, required=False)
+            request_entry(request.scope)["kind"] = "config"
+            body = caller.cfg.public(caller.features)
+            if caller.principal is not None:
+                await run_in_threadpool(self.s.meter.mark_active, caller.user_id, caller.client.app_version,
+                                        caller.client.platform)
+                body["usage"] = await run_in_threadpool(self.s.meter.usage_today, caller.user_id)
+            wire_v2.validate("config", body, caller.client)
+            return JSONResponse(body)
+
+        try:
+            return await asyncio.wait_for(answer(), timeout=self.s.remote.current()["deadlines"]["config"])
+        except asyncio.TimeoutError:
+            raise Refusal("deadline_exceeded") from None
 
     # -- POST /v2/transcribe -----------------------------------------------------
 
@@ -312,9 +356,12 @@ class V2:
             if not audio:
                 raise Refusal("audio_unreadable")
             body_hmac = s.body_hmac(audio)
-            work_dir = await run_in_threadpool(tempfile.TemporaryDirectory, dir=s.tmp_root, prefix="notch-",
-                                               ignore_cleanup_errors=True)
+            await self.transcribing.acquire(cfg["transcribe_concurrency"],
+                                            min(TRANSCRIBE_WAIT, max(deadline.remaining(), 0) / 2))
+            work_dir = None
             try:
+                work_dir = await run_in_threadpool(tempfile.TemporaryDirectory, dir=s.tmp_root, prefix="notch-",
+                                                   ignore_cleanup_errors=True)
                 path = os.path.join(work_dir.name, "input")
                 await run_in_threadpool(_write, path, audio)
                 del audio
@@ -345,15 +392,17 @@ class V2:
                                       prompt_version=None, deadline=deadline, work=work, respond=respond,
                                       audio_seconds=probe.seconds)
             finally:
-                await run_in_threadpool(work_dir.cleanup)
+                if work_dir is not None:
+                    await run_in_threadpool(work_dir.cleanup)
+                await self.transcribing.release()
         finally:
             self.inflight.leave(caller.user_id)
         return JSONResponse(body)
 
     async def _probe(self, path, demuxer, deadline):
         """Decode the upload once, on the work pool, under the deadline."""
-        future = asyncio.get_running_loop().run_in_executor(self.s.executor, self.s.audio.probe, path, demuxer,
-                                                            deadline)
+        future = _abandonable(asyncio.get_running_loop().run_in_executor(self.s.executor, self.s.audio.probe, path,
+                                                                         demuxer, deadline))
         try:
             return await asyncio.wait_for(asyncio.shield(future), timeout=max(deadline.remaining(), 0) + GRACE)
         except asyncio.TimeoutError:
@@ -529,6 +578,15 @@ class V2:
         except asyncio.TimeoutError:
             raise Refusal("deadline_exceeded") from None
         return Response(status_code=204)
+
+
+def _abandonable(future):
+    """
+    A worker's future the route may stop waiting for at its deadline: whatever it ends
+    with later is collected here, so asyncio never reports it as unretrieved.
+    """
+    future.add_done_callback(lambda done: done.cancelled() or done.exception())
+    return future
 
 
 def _write(path, data):

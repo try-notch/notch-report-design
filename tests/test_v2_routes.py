@@ -8,6 +8,8 @@ Notch Cloud, account deletion and the ZDR audit have files of their own.
 
 import asyncio
 import os
+import threading
+import time
 
 import httpx
 import pytest
@@ -590,3 +592,50 @@ def test_the_call_is_settled_before_its_response_is_written(v2):
         response = client.post("/v2/analyze", json={"transcript": SPOKEN}, headers=v2.headers(request_key=key()))
     assert response.status_code == 200
     assert seen == [[("ok", pytest.approx(0.002))]]
+
+
+class CountingClient(FakeClient):
+    """A FakeClient that notes how many transcriptions it is running at once."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.running, self.peak, self.lock = 0, 0, threading.Lock()
+
+    def transcribe(self, audio, **kwargs):
+        with self.lock:
+            self.running += 1
+            self.peak = max(self.peak, self.running)
+        try:
+            time.sleep(0.3)
+            return super().transcribe(audio, **kwargs)
+        finally:
+            with self.lock:
+                self.running -= 1
+
+
+def _two_transcriptions(v2):
+    async def both():
+        transport = httpx.ASGITransport(app=v2.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            def one():
+                return client.post("/v2/transcribe", content=fake_recording(SPOKEN),
+                                   headers=v2.headers(request_key=key(), Content_Type="audio/mp4",
+                                                      X_Notch_Mode="daily", X_Notch_Duration="4"))
+            return await asyncio.gather(one(), one())
+    return asyncio.run(both())
+
+
+def test_transcriptions_over_the_process_limit_wait_for_a_slot(tmp_path):
+    fake = CountingClient()
+    with harness(tmp_path, fake=fake, overrides={"transcribe_concurrency": 1}) as v2:
+        assert sorted(r.status_code for r in _two_transcriptions(v2)) == [200, 200]
+        assert fake.peak == 1
+
+
+def test_a_transcription_that_cannot_get_a_slot_in_time_is_unavailable(tmp_path):
+    fake = CountingClient(delay=3.0)
+    with harness(tmp_path, fake=fake, overrides={"transcribe_concurrency": 1, "deadlines": {"transcribe": 2}}) as v2:
+        responses = _two_transcriptions(v2)
+        codes = sorted(r.json()["error"]["code"] for r in responses)
+        assert codes == ["deadline_exceeded", "unavailable"]
+        refused(next(r for r in responses if r.status_code == 503), 503, "unavailable")

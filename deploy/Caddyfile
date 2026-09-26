@@ -8,6 +8,14 @@
 {
 	# Optional: an address Let's Encrypt may write to about this certificate.
 	# email <an address you read>
+
+	servers {
+		timeouts {
+			# The app gives up on a transcription 150 s in, upload included; a slower body is abandoned.
+			read_header 15s
+			read_body 3m
+		}
+	}
 }
 
 api.trynotch.xyz {

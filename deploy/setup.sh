@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# deploy/setup.sh — prepare an Ubuntu 24.04 VPS for notch_api. Run it on the VPS, as root,
-# from a copy of this deploy/ folder:
+# deploy/setup.sh — prepare an Ubuntu 24.04 VPS for notch_api. Run it on the VPS through
+# sudo, from a copy of this deploy/ folder (as the image's `ubuntu` user, say):
 #
-#   sudo bash deploy/setup.sh
+#   sudo bash notch-deploy/setup.sh
 #
 # Idempotent: every step checks before it acts, so running it again repairs a drifted
 # machine and changes nothing on a correct one. It never overwrites /etc/notch/*.env.
@@ -13,14 +13,16 @@
 # that lets in only SSH (22), HTTP (80) and HTTPS (443). Code arrives with deploy.sh.
 set -euo pipefail
 
-[[ $EUID -eq 0 ]] || { echo "setup.sh: run as root (sudo bash deploy/setup.sh)" >&2; exit 1; }
+[[ $EUID -eq 0 ]] || { echo "setup.sh: run it through sudo (sudo bash notch-deploy/setup.sh)" >&2; exit 1; }
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 app=/opt/notch/app
 venv=/opt/notch/venv
 state=/var/lib/notch
 tmpfs=/var/lib/notch/tmp
 conf=/etc/notch
-tmpfs_size=1g   # a ceiling, not a reservation: a transcription holds about 30 MB here while it runs
+# A ceiling, not a reservation: a transcription holds about 30 MB here while it runs, and two
+# run at once (remote config transcribe_concurrency), so 512 MB is ample on a 4 GB machine.
+tmpfs_size=512m
 
 say() { printf '\n== %s\n' "$*"; }
 

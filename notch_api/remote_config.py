@@ -53,6 +53,9 @@ DEFAULTS = {
     "spend": {"account_usd_per_day": 1.00, "global_usd_per_day": 20.00},
     "max_in_flight": 3,
     "attempts_per_hour": 5,
+    # Transcriptions decoding and transcribing at once in the process (the VPS has 2 vCPUs);
+    # one more waits up to 10 s for a slot, then is 503 unavailable.
+    "transcribe_concurrency": 2,
     "max_transcript_chars": 40000,
     "max_request_json_bytes": 256 * 1024,   # analyze and takeaways; reports get limits.max_json_bytes
     "report_max_days": 400,
@@ -105,6 +108,7 @@ SCHEMA = _closed({
                       "global_usd_per_day": {"type": "number", "minimum": 0}}),
     "max_in_flight": _POSITIVE,
     "attempts_per_hour": _POSITIVE,
+    "transcribe_concurrency": {"type": "integer", "minimum": 1, "maximum": 16},
     "max_transcript_chars": _POSITIVE,
     "max_request_json_bytes": _POSITIVE,
     "report_max_days": _POSITIVE,

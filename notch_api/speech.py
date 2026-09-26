@@ -83,8 +83,9 @@ class FFmpeg:
     def _run(self, args, deadline):
         timeout = FFMPEG_TIMEOUT if deadline is None else min(FFMPEG_TIMEOUT, max(deadline.remaining(), 0.1))
         try:
-            return subprocess.run([self.binary, "-nostdin", "-hide_banner", "-protocol_whitelist", "file", *args],
-                                  capture_output=True, timeout=timeout)
+            # One thread each: the VPS has two cores, and a transcription may run three of these at once.
+            return subprocess.run([self.binary, "-nostdin", "-hide_banner", "-threads", "1",
+                                   "-protocol_whitelist", "file", *args], capture_output=True, timeout=timeout)
         except subprocess.TimeoutExpired:
             if deadline is not None and deadline.expired():
                 raise DeadlineExceeded("The deadline ran out while ffmpeg worked.") from None
