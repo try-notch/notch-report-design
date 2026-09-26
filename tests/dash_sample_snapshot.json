@@ -19,7 +19,7 @@
       "last_route": "POST /v1/entries",
       "requests_1h": 9,
       "device": {
-        "name": "Chetan’s iPhone",
+        "name": "Example iPhone",
         "model": "iPhone 17 Pro",
         "os": "27.0",
         "connection": "disconnected",
@@ -39,8 +39,8 @@
       "version": "2026.9.3",
       "requests_total": 53,
       "request_errors": 0,
-      "host": "absolutely-innovations-candles-staff.trycloudflare.com",
-      "phone_host": "absolutely-innovations-candles-staff.trycloudflare.com",
+      "host": "sample-quick-tunnel.trycloudflare.com",
+      "phone_host": "sample-quick-tunnel.trycloudflare.com",
       "probe": {
         "at": 1790368690.2,
         "ok": true,

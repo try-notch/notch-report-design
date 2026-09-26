@@ -11,7 +11,7 @@ from notch_api import config  # importing it loads .env, where the OpenRouter ke
 
 CADDY_LOG = "/opt/homebrew/var/log/caddy-notch.access.log"
 TUNNEL_METRICS = "127.0.0.1:20241"
-DEVICE = "00008150-000261540203401C"  # the phone's hardware UDID
+DEVICE = None  # set NOTCH_DASH_DEVICE to the phone's hardware UDID to turn the device panel on
 PORT = 4130
 
 
