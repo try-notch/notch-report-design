@@ -1,34 +1,48 @@
 # notch_api — the server the iOS app talks to
 
-A local server that speaks the backend contract `notch-ios-dev` is written against
-(`docs/data-and-backend-integration.md` §3 schema, §5 API): upload a recording and get
-back an analysed notch; ask for a report over a date range and get back the document the
-app renders. It sits beside the report demo in this repo and reuses its prompts and
-seed data; the demo CLI (`generate_report.py`, `tagger.py`, …) is unchanged.
+Two APIs in one process:
 
-[IOS_COMPATIBILITY.md](IOS_COMPATIBILITY.md) measures how far this is from the full
-contract.
+- **`/v2`, the production API** (`docs/backend-contract.md` in notch-ios-dev, accepted
+  2026-09-26). Stateless: every call is synchronous, its response carries the whole result,
+  and the server keeps no readable content. The device is the system of record. It runs on
+  the VPS at `https://api.trynotch.xyz`; [DEPLOY.md](DEPLOY.md) has every step.
+- **`/v1`, the development harness** (§3/§5 of `docs/data-and-backend-integration.md`): the
+  server of record the Debug build still talks to until cutover. It stores transcripts and
+  audio, so it is never mounted when `NOTCH_ENV=prod`.
+
+Both reuse the report demo's measured prompts, now copied into `notch_api/prompts.py` (held
+equal to their demo sources by `tests/test_prompts.py`); the demo CLI (`generate_report.py`,
+`tagger.py`, …) is unchanged. [IOS_COMPATIBILITY.md](IOS_COMPATIBILITY.md) measures `/v1`
+against the old §5 contract.
 
 ---
 
 ## Run it
 
 ```bash
-uv venv --python 3.13 .venv && uv pip install --python .venv/bin/python -r requirements.txt
-echo 'OPENROUTER_API_KEY=sk-or-...' > .env      # one key for every model call
-.venv/bin/python -m notch_api                    # http://api.notch.localhost (127.0.0.1:4131)
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+echo 'OPENROUTER_API_KEY=<your key>' > .env       # one key for every model call
+NOTCH_DEV_AUTH=1 .venv/bin/python -m notch_api    # http://api.notch.localhost (127.0.0.1:4131)
 ```
 
-Every `/v1` request needs `Authorization: Bearer dev`. There is one development user; the
-contract's Supabase JWT verification is not built. Environment knobs: `NOTCH_DB`,
-`NOTCH_AUDIO_DIR`, `NOTCH_PORT`, `NOTCH_HOST` (default `127.0.0.1`; `0.0.0.0` lets a phone
-on the same Wi-Fi in — and anyone else on that network), and `NOTCH_FAKE_MODELS=1` to run
-on deterministic fakes with no key and no network.
+`requirements-server.txt` is what the server needs (and all the VPS installs);
+`requirements.txt` adds the demo CLI, the `/v1` harness's multipart parser and pytest.
+
+- **`/v1`** needs `Authorization: Bearer dev`, the one development user.
+- **`/v2`** verifies Supabase access tokens when `SUPABASE_URL` is set, and accepts
+  `Bearer dev` too when `NOTCH_DEV_AUTH=1` (refused in prod). Every `/v2` call needs an
+  `X-Client` header (`ios/1.0.0+1`).
+- **Environment:** `NOTCH_DB` and `NOTCH_AUDIO_DIR` (`/v1`'s files), `NOTCH_METER_DB` (`/v2`'s
+  meter, default `meter.db` beside `NOTCH_DB`), `NOTCH_TMP` (where ffmpeg's per-request
+  directories go), `NOTCH_PORT`, `NOTCH_HOST` (default `127.0.0.1`; `0.0.0.0` lets a phone on
+  the same Wi-Fi in, and anyone else on that network), `NOTCH_FAKE_MODELS=1` (deterministic
+  fakes, no key, no network), and the production settings in `notch_api/services.py`.
+- **Logs** are scrubbed JSON lines on stderr in every mode (`privacy.py`).
 
 **Recording from the iOS app:** a Debug build of `notch-ios-dev` pointed at this server
-records real notches through it — `docs/local-backend.md` there has the steps (register L1).
+records real notches through `/v1`; `docs/local-backend.md` there has the steps (register L1).
 
-**A brand-new user** is a fresh database with no seed — the app then shows only what you
+**A brand-new user** is a fresh database with no seed; the app then shows only what you
 record:
 
 ```bash
@@ -42,12 +56,109 @@ and resets the profile and settings to their defaults. The user row stays.
 ```bash
 .venv/bin/python -m notch_api.seed               # the 52 demo transcripts, analysed for real
 .venv/bin/python -m notch_api.eval_categories    # Jev vs the chat model on the hand labels
-.venv/bin/python -m pytest -q                    # offline, ~4 s
-.venv/bin/python e2e/run_e2e.py --offline        # the whole flow on fakes, ~2 s
-.venv/bin/python e2e/run_e2e.py                  # the whole flow on real models, ~2.5 min, ~$0.06
+.venv/bin/python -m notch_api.admin config show  # /v2's remote config (NOTCH_METER_DB)
+.venv/bin/python -m pytest -q                    # offline, ~25 s
+.venv/bin/python e2e/run_e2e.py --offline        # the /v1 flow on fakes, ~2 s
+.venv/bin/python e2e/run_e2e.py                  # the /v1 flow on real models, ~2.5 min, ~$0.06
 ```
 
-## What it serves
+## /v2: what it serves
+
+| Route | Behaviour |
+| --- | --- |
+| `GET /healthz` | `{ok: true}`. No headers needed (monitors call it). |
+| `GET /v2/config` | Remote config for the app: `config_version`, `min_app_version`, `features`, `limits`. Without a token, just that; with one, also `usage` (what the backstops counted today, UTC) and an `active_days` row for the account. |
+| `POST /v2/transcribe` | The raw audio as the body (`audio/mp4`, `mpeg`, `ogg`, `webm`, `wav`), `X-Notch-Mode`, `X-Notch-Duration` (a claim). Decoded by ffmpeg to measure it; past 480 s cut near pauses into ~300 s pieces transcribed 3 at a time. `{transcript, word_count, audio_seconds, chunks, config_version}`; `audio_seconds` is what the provider billed. |
+| `POST /v2/analyze` | `{transcript, project_names, vocabulary}` → summary, takeaways, tags, mood, impact note, recognition, `project_name` (one the device sent, or null), categories, `category_scores`, `classified_by`, versions. |
+| `POST /v2/takeaways` | The same input → `{takeaways, tags}` written again, versions. |
+| `POST /v2/reports` | The report's entries, author and scope, sent by the device → `facts` counted by the server (`momentum`, `project_breakdown`), prose, themes, highlights (ids not sent are dropped), versions. |
+| `DELETE /v2/account` | Apple revoked when `apple_authorization_code` is sent (required for an Apple-linked account), the Supabase user deleted, every metering row and Notch Cloud record of the account deleted, the id kept as deleted. `204`, and `204` again on a retry. |
+| `PUT /v2/cloud/records` · `GET /v2/cloud/changes` | Notch Cloud: opaque ciphertext under a per-account sequence; the newest write of an id wins; pages by `since`/`limit` and a byte budget. |
+| `GET`/`PUT /v2/cloud/keycheck` · `DELETE /v2/cloud` | The recovery-key verifier (404 until set up), and turning Notch Cloud off (records and keycheck wiped, the sequence kept). |
+
+**Every processing call** goes: headers (400) → token (401) → account (403 `account_gone` /
+`account_blocked`) → app version (426) → switches (503 `processing_paused` /
+`feature_disabled`) → the account's calls in this process (429 `rate_limited`) → the body,
+read with a cap (413, 415, 400) → for audio, the decode (422, 413 `audio_too_long`) →
+check-and-start (409, 429, 503) → the models, under the deadline (502, 422, 504) → settle →
+the response, validated against the enums of the client's contract version (from `X-Client`).
+The error envelope is `{"error": {code, message, retryable}}` (+ `resets_at` on
+`quota_exceeded`), `Retry-After` on every 429 and 503 and on 409 `request_in_flight`, and a
+message that is fixed per code and never echoes input.
+
+**Metering** (`meter.py`, one SQLite file, no content columns but Notch Cloud ciphertext):
+check-and-start is one `BEGIN IMMEDIATE` transaction that refuses (in order) a deleted or
+blocked account, the $20/day global breaker, a key reused with another body (HMAC under
+`NOTCH_BODY_HMAC_KEY`), a key still in flight, 5 model-reaching attempts on a key in the last
+hour, 3 calls in flight, the day's backstop of distinct keys (twice the phone's limits: 20
+notches, 10 reports, 40 rewrites), and $1/day per account; otherwise it inserts the
+`in_flight` row. Settle records the outcome, tokens, cost, models and providers, and the
+user-less `daily_spend`, before the response is written. Quotas count distinct keys among
+`ok` and live `in_flight` rows; cost counts every attempt. An `in_flight` row past its
+deadline has ended.
+
+**Remote config** (`remote_config.py`): append-only versioned rows in the meter; the newest
+valid row, deep-merged over the baked defaults, wins, and an invalid one is logged and
+skipped. `python -m notch_api.admin config push <file>` (validated first), `config show`,
+`account block|unblock <uuid>`.
+
+**Zero retention** (`zdr.py`): chat calls send `provider: {zdr: true, data_collection: "deny",
+require_parameters: true}`. After every transcription and Jev call the server looks up the
+generation's provider and checks it against OpenRouter's ZDR endpoint list (cached an hour);
+on a miss it pushes a config version turning that path off (`features.capture`, or
+`classifier` back to `chat`) and logs an alert. The result was still returned: the content
+had already gone.
+
+**No content at rest** (`privacy.py`): one allowlisted JSON line per request; every other
+record reduced to its message template; exceptions as type and frames only; the uvicorn
+access log off; an outermost ASGI layer that answers any crash with a bare 500 so uvicorn
+never prints one; ffmpeg's files only in a `TemporaryDirectory` under `NOTCH_TMP`, removed
+before the response. `tests/test_no_content_at_rest.py` proves it with a canary.
+
+**Modules:** `v2.py` (the routes and the report request), `cloud.py`, `auth.py` (JWKS through
+PyJWT's `PyJWKClient` over httpx, cached ≤ 10 min, refetched on an unknown kid),
+`meter.py`, `remote_config.py`, `speech.py` (ffmpeg), `zdr.py`, `identity.py` (Apple,
+Supabase admin), `privacy.py`, `wire_v2.py` (headers, errors, schemas, enums per contract
+version), `services.py` (building it all from the environment), `prompts.py`, `admin.py`.
+
+### /v2 decisions where the contract left room
+
+- `X-Client` is required on every `/v2` call but not on `/healthz`, which monitors call bare.
+- "Later" in the contract's retryable column is `retryable: true` with a `Retry-After`.
+- `resets_at` rides inside the error object: `{"error": {..., "resets_at": "…Z"}}`.
+- A token-less `GET /v2/config` is fine; a bad token there is still 401, never silently
+  anonymous. A blocked account still gets config.
+- `analyze` shares the notches backstop (20 distinct keys per UTC day), counted on its own.
+- Idempotency keys are compared lowercase (iOS sends `UUID().uuidString`, upper case), and a
+  key is bound to its body per kind for all time (transcribe and analyze share the notch id).
+- Duration is measured by decoding a file in the tmpfs directory, not `ffmpeg -i -`: an MP4's
+  index is often at its end, and a pipe cannot seek. ffmpeg may read only through the
+  demuxer the `Content-Type` names, and only local files.
+- A recording the client itself says is over `max_recording_seconds` is refused before
+  decoding.
+- `X-Notch-Locale`'s two-letter language picks the speech-to-text language; anything else
+  falls back to config's `stt.language`.
+- With `classifier: "chat"` (the default) analyze makes two chat calls side by side, the
+  writing prompt and the measured v4 classification prompt, rather than merging them into one
+  unmeasured prompt.
+- A provider 401, 402 or 404 (OpenRouter's "no endpoint for your data policy") is
+  `model_unavailable`, not a refusal; a speech-to-text refusal is `audio_unreadable`.
+- Reports: entries sort by date then id; entries dated outside the range, or repeated, are
+  400; transcripts past `report_transcripts_up_to` are left out of the prompt, not refused; a
+  notch kept as a transcript only (no summary) may be in a report. More than
+  `report_max_entries` (400) entries, or a range over `report_max_days` (400), is
+  `range_too_large`.
+- Notch Cloud: a deleted record may still carry ciphertext (its deletion time lives inside
+  it); a batch naming an id twice keeps the last write; a page also stops at 4 MB of
+  ciphertext; `GET /v2/cloud/keycheck` before setup is 404 `not_found`. Blocked accounts and
+  `features.notch_cloud: false` refuse writes only.
+- Account deletion: a code Apple refuses is 400 (nothing deleted) unless the account is
+  already deleted; an Apple-linked token (from its `app_metadata`) without a code is 400.
+- A generation whose provider cannot be learned, or a ZDR list that cannot be fetched, is an
+  alert (`zdr_unverified`) and switches nothing off.
+
+## /v1, the development harness: what it serves
+
 
 | Route | Behaviour |
 | --- | --- |
@@ -149,8 +260,9 @@ Python function every connection registers; `users.reminder_weekdays` has no sub
 
 | Check | Result |
 | --- | --- |
-| `pytest` (offline) | 287 passed |
-| `e2e/run_e2e.py --offline` | 147/147 (Sep 25, with the record section) |
+| `pytest` (offline) | 726 passed (Sep 26, with `/v2`) |
+| `e2e/run_e2e.py --offline` | 147/147 (Sep 26, `/v1` unchanged with `/v2` beside it) |
+| `python -m notch_api` on fakes, `/v2` over curl | config, transcribe, analyze and a refused header answered; scrubbed JSON lines only; the temp root empty (Sep 26) |
 | `e2e/run_e2e.py` (live, three consecutive runs on Sep 24) | 120/120 each, ~2.5 min, ~$0.06 a run — before the record section; not yet re-run with it |
 
 The live run seeds the 52 demo transcripts through Jev and DeepSeek, uploads five spoken
@@ -180,8 +292,10 @@ confirmed ones are in the "Harden the server after a four-lens review" commit.
 - Recordings over ~80 minutes exceed the speech-to-text budget and fail loudly rather than
   being split.
 - Custom report ranges have no length cap (§13 leaves custom ranges open).
-- Everything the iOS document lists and the route table above does not: auth, Postgres
-  with row-level security, Storage and its purge, push, search, reanalyse, delta sync,
-  export and a real account deletion (the reset above keeps the one dev user).
+- `/v1`: everything the old iOS document lists and its route table does not (Postgres with
+  row-level security, Storage and its purge, push, search, reanalyse, delta sync, export).
+  `/v2` replaces it; `/v1` stays only as the harness until cutover.
+- `/v2` has not yet run against real OpenRouter, Supabase or Apple: everything above is
+  proven on fakes and mocks (DEPLOY.md lists what the owner must set up first).
 - A fixed-offset zone name such as `GMT+0530` is refused as a `tz` or `time_zone`; only
   IANA names are accepted.
