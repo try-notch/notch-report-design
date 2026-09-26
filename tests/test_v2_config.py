@@ -145,6 +145,13 @@ def test_admin_pushes_a_valid_file_and_shows_it(meter, tmp_path):
     assert json.loads(row[1]) == {"features": {"notch_cloud": False}}
 
 
+def test_admin_reads_a_body_from_stdin(meter):
+    out, err = io.StringIO(), io.StringIO()
+    code = admin.main(["config", "push", "-"], meter_db=meter.path, out=out, err=err,
+                      stdin=io.StringIO('{"attempts_per_hour": 7}'))
+    assert code == 0 and RemoteConfig(meter).current()["attempts_per_hour"] == 7
+
+
 def test_admin_refuses_an_invalid_file_and_writes_nothing(meter, tmp_path):
     body = tmp_path / "config.json"
     body.write_text(json.dumps({"provider": {"zdr": False}}))

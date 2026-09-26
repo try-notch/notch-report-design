@@ -1,7 +1,7 @@
 """
 python -m notch_api.admin — change the running server's config and accounts, without a deploy.
 
-    config push <file.json> [--note TEXT]   validate the body, then append it as the next version
+    config push <file.json|-> [--note TEXT] validate the body (a file, or - for stdin), then append it
     config show                             the version and body the server is running
     account block <uuid> [--code CODE]      refuse the account's processing and Notch Cloud writes
     account unblock <uuid>
@@ -45,7 +45,7 @@ def _parser():
     return parser
 
 
-def main(argv=None, *, meter_db=None, out=sys.stdout, err=sys.stderr):
+def main(argv=None, *, meter_db=None, out=sys.stdout, err=sys.stderr, stdin=sys.stdin):
     args = _parser().parse_args(argv)
     meter = Meter(meter_db or env.METER_DB)
     if args.what == "config":
@@ -56,8 +56,11 @@ def main(argv=None, *, meter_db=None, out=sys.stdout, err=sys.stderr):
                               "effective": current.data}, indent=2, sort_keys=True), file=out)
             return 0
         try:
-            with open(args.file, encoding="utf-8") as f:
-                body = json.load(f)
+            if args.file == "-":
+                body = json.load(stdin)
+            else:
+                with open(args.file, encoding="utf-8") as f:
+                    body = json.load(f)
             version = remote.push(body, note=args.note,
                                   created_by=os.environ.get("SUDO_USER") or getpass.getuser())
         except (OSError, ValueError, ConfigInvalid) as exc:
