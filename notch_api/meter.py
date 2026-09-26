@@ -220,8 +220,14 @@ class Meter:
     def touch_account(self, user_id):
         """
         The caller's account, created on its first authenticated call. A deleted one is
-        403 account_gone, and is never created again.
+        403 account_gone, and is never created again. Read first: only a first call writes.
         """
+        with self._read() as conn:
+            if conn.execute("SELECT 1 FROM deleted_accounts WHERE user_id = ?", (user_id,)).fetchone():
+                raise Refusal("account_gone")
+            row = conn.execute("SELECT * FROM accounts WHERE user_id = ?", (user_id,)).fetchone()
+        if row is not None:
+            return Account(row)
         now = self.clock()
         with self._write() as conn:
             return self._account(conn, user_id, now)
