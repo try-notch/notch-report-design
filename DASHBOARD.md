@@ -46,7 +46,7 @@ NOTCH_DASH_GATE_SECRET_FILE=/path/to/gate-secret \
 | `NOTCH_DASH_TUNNEL_LOG` | off | The cloudflared log, used for the public URL and WRN/ERR lines. |
 | `NOTCH_DASH_TUNNEL_METRICS` | `127.0.0.1:20241` | The cloudflared metrics server (`/ready`, `/metrics`). |
 | `NOTCH_DASH_GATE_SECRET_FILE` | off | A file holding the 48-lowercase-hex gate secret. It turns on the end-to-end probe. |
-| `NOTCH_DASH_DEVICE` | `00008150-000261540203401C` | The phone's hardware UDID for `devicectl`. |
+| `NOTCH_DASH_DEVICE` | unset (the device panel is off) | The phone's hardware UDID for `devicectl`. |
 | `OPENROUTER_API_KEY` | read from `.env` (loaded when `notch_api.config` is imported) | Used only for `GET /api/v1/key` (spend). |
 | `NOTCH_DASH_HOSTS` | none | Extra `Host` values to answer, comma-separated. On the VPS: the machine's tailnet name (`<machine>.<tailnet>.ts.net`), which `tailscale serve` passes through. |
 | `NOTCH_DASH_TAILNET` | off | `1` trusts Tailscale's address ranges (`100.64.0.0/10`, `fd7a:115c:a1e0::/48`) in `X-Forwarded-For`, where `tailscale serve` names the tailnet device it was reached from. Only for a machine where nothing but `tailscale serve` can reach the dashboard (DEPLOY.md). |
@@ -167,7 +167,7 @@ This example is illustrative. It shows one notch in flight, one written and one 
       "last_route": "POST /v1/entries",  // that request, normalized
       "requests_1h": 9,  // phone requests in the last hour
       "device": {  // devicectl, matched on properties.hardware.udid
-        "name": "Chetan’s iPhone",  // properties.state.name
+        "name": "Example iPhone",  // properties.state.name
         "model": "iPhone 17 Pro",  // properties.hardware.marketingName
         "os": "27.0",  // properties.software.osVersionNumber.stringValue
         "connection": "disconnected",  // properties.connection.state (devicectl's own link, not the network)
@@ -187,8 +187,8 @@ This example is illustrative. It shows one notch in flight, one written and one 
       "version": "2026.9.3",  // build_info{version}
       "requests_total": 53,  // cloudflared_tunnel_total_requests since cloudflared started
       "request_errors": 0,  // cloudflared_tunnel_request_errors
-      "host": "absolutely-innovations-candles-staff.trycloudflare.com",  // live public host, no scheme: user_hostnames_counts, else the tunnel log
-      "phone_host": "absolutely-innovations-candles-staff.trycloudflare.com",  // X-Forwarded-Host of the phone's newest request, however old
+      "host": "sample-quick-tunnel.trycloudflare.com",  // live public host, no scheme: user_hostnames_counts, else the tunnel log
+      "phone_host": "sample-quick-tunnel.trycloudflare.com",  // X-Forwarded-Host of the phone's newest request, however old
       "probe": {  // GET https://<host>/<secret>/healthz
         "at": 1790368690.2,
         "ok": true,  // 200 and body {"ok": true}

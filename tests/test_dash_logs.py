@@ -155,12 +155,12 @@ def test_the_tunnel_log_gives_the_public_host_and_its_warnings_without_their_fie
     parser = logs.TunnelLog()
     items = _feed(parser, """\
 2026-09-25T20:31:24Z INF Requesting new quick Tunnel on trycloudflare.com...
-2026-09-25T20:31:28Z INF |  https://absolutely-innovations-candles-staff.trycloudflare.com                            |
+2026-09-25T20:31:28Z INF |  https://sample-quick-tunnel.trycloudflare.com                            |
 2026-09-25T20:32:40Z WRN Failed to refresh DNS local resolver error="lookup region1.v2.argotunnel.com: no such host"
 2026-09-25T20:33:40Z WRN Failed to refresh DNS local resolver error="lookup region2.v2.argotunnel.com: no such host"
 2026-09-25T20:34:00Z ERR Failed to request quick Tunnel error="Post \\"https://api.trycloudflare.com/tunnel\\": EOF"
 """)
-    assert parser.host == "absolutely-innovations-candles-staff.trycloudflare.com"
+    assert parser.host == "sample-quick-tunnel.trycloudflare.com"
     groups = logs.group_errors(items)
     assert [(g["level"], g["message"], g["count"]) for g in groups] == [
         ("ERR", "Failed to request quick Tunnel", 1), ("WRN", "Failed to refresh DNS local resolver", 2)]
