@@ -15,8 +15,13 @@ DEVICE = None  # set NOTCH_DASH_DEVICE to the phone's hardware UDID to turn the 
 PORT = 4130
 
 
-def _hosts(port):
-    return ("dash.notch.localhost", f"127.0.0.1:{port}", f"localhost:{port}")
+# Where `tailscale serve` forwards from: Tailscale's IPv4 (CGNAT) and IPv6 ranges. Trusted only
+# with NOTCH_DASH_TAILNET=1, on a machine where the dashboard is reachable by nothing else.
+TAILNET = ("100.64.0.0/10", "fd7a:115c:a1e0::/48")
+
+
+def _hosts(port, extra=()):
+    return ("dash.notch.localhost", f"127.0.0.1:{port}", f"localhost:{port}", *extra)
 
 
 @dataclass(frozen=True)
@@ -34,6 +39,9 @@ class Settings:
     notch_port: int = config.PORT
     port: int = PORT
     allowed_hosts: tuple = _hosts(PORT)  # the Host header a request must carry (DNS rebinding)
+    trusted_forwarders: tuple = ()        # networks, besides loopback, X-Forwarded-For may name
+    bind: str = "127.0.0.1"               # the interface uvicorn listens on
+    behind_auth_proxy: bool = False       # a proxy that authenticates every request stands in front
 
     @classmethod
     def from_env(cls, environ=os.environ):
@@ -48,4 +56,9 @@ class Settings:
                    tunnel_metrics=opt("NOTCH_DASH_TUNNEL_METRICS", TUNNEL_METRICS),
                    gate_secret_file=opt("NOTCH_DASH_GATE_SECRET_FILE"), device=opt("NOTCH_DASH_DEVICE", DEVICE),
                    openrouter_key=(environ.get("OPENROUTER_API_KEY") or "").strip() or None,
-                   notch_port=int(environ.get("NOTCH_PORT") or config.PORT), port=port, allowed_hosts=_hosts(port))
+                   notch_port=int(environ.get("NOTCH_PORT") or config.PORT), port=port,
+                   allowed_hosts=_hosts(port, [h.strip() for h in (environ.get("NOTCH_DASH_HOSTS") or "").split(",")
+                                               if h.strip()]),
+                   trusted_forwarders=TAILNET if environ.get("NOTCH_DASH_TAILNET") == "1" else (),
+                   bind=environ.get("NOTCH_DASH_BIND") or "127.0.0.1",
+                   behind_auth_proxy=environ.get("NOTCH_DASH_AUTH_PROXY") == "1")

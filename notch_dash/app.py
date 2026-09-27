@@ -144,16 +144,20 @@ def _basename(path):
     return path and os.path.basename(path.rstrip("/"))
 
 
-def _from_this_mac(request):
+def _from_this_mac(request, trusted=()):
     """
     Caddy listens on *:80 and sets X-Forwarded-For to the address it was reached from,
     replacing whatever the client sent: anything but loopback there came from another machine.
+    On the VPS, `tailscale serve` does the same with the tailnet address it was reached from,
+    so there `trusted` (Settings.trusted_forwarders) adds Tailscale's ranges.
     """
+    networks = [ipaddress.ip_network(net) for net in trusted]
     try:
-        return all(ipaddress.ip_address(ip.strip()).is_loopback
-                   for ip in ",".join(request.headers.getlist("x-forwarded-for") or ["127.0.0.1"]).split(","))
+        addresses = [ipaddress.ip_address(ip.strip()) for ip in
+                     ",".join(request.headers.getlist("x-forwarded-for") or ["127.0.0.1"]).split(",")]
     except ValueError:
         return False
+    return all(a.is_loopback or any(a in net for net in networks if a.version == net.version) for a in addresses)
 
 
 def _page_file(name):
@@ -183,7 +187,7 @@ def create_app(settings, *, http=None, run=subprocess.run, clock=time.time, star
     async def guard(request: Request, call_next):
         if request.headers.get("host") not in settings.allowed_hosts:
             response = PlainTextResponse("Misdirected request.", 421)
-        elif not _from_this_mac(request):
+        elif not settings.behind_auth_proxy and not _from_this_mac(request, settings.trusted_forwarders):
             response = PlainTextResponse("Only this Mac can see it.", 403)
         elif request.method not in ("GET", "HEAD"):
             response = PlainTextResponse("Read only.", 405, headers={"Allow": "GET, HEAD"})

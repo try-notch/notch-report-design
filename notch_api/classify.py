@@ -9,7 +9,7 @@ ours to set (config.CATEGORY_THRESHOLDS, config.PROJECT_CONFIDENCE) and to measu
 takeaways, impact note, acknowledgement.
 
   categories  one yes/no (`noul`) per category. `true` is the category's catalog
-              explanation from seed_db, the measured v4 policy; `false` states
+              explanation from prompts.CATEGORY_CATALOG, the measured v4 policy; `false` states
               what that explanation excludes. Each applies at p >= its own
               threshold; if none does, the one nearest its threshold, so every
               notch carries one.
@@ -22,13 +22,11 @@ The answers are untrusted: a missing or malformed one raises ModelRefused, which
 analysis.py treats like any other Jev failure — it classifies with the chat model.
 """
 
-import seed_db
-
-from . import config
+from . import config, prompts
 from .openrouter import ModelRefused
 
-CATEGORIES = tuple(seed_db.TAGS)  # wins, collaboration, leadership, growth, challenges
-MOODS = ("up", "flat", "down")
+CATEGORIES = prompts.CATEGORIES  # wins, collaboration, leadership, growth, challenges
+MOODS = prompts.MOODS
 NO_PROJECT = "none"
 
 # criteria.false per category: the cases its catalog explanation rules out, as one statement.
@@ -44,9 +42,9 @@ _EXCLUDES = {
     "challenges": "The work went smoothly; any 'boring' or 'took longer than planned' is a passing remark on "
                   "an entry whose real story is a clean result.",
 }
-_EXPLANATIONS = dict(seed_db.TAG_CATALOG)
+_EXPLANATIONS = dict(prompts.CATEGORY_CATALOG)
 if set(_EXCLUDES) != set(_EXPLANATIONS):
-    raise RuntimeError("seed_db.TAG_CATALOG and classify._EXCLUDES name different categories.")
+    raise RuntimeError("prompts.CATEGORY_CATALOG and classify._EXCLUDES name different categories.")
 
 
 def questions(project_names):
@@ -78,22 +76,26 @@ def questions(project_names):
     return asked
 
 
-def classify(client, transcript, *, project_names):
+def classify(client, transcript, *, project_names, thresholds=None, project_confidence=None):
     """One decisions call -> {categories, category_scores, mood, project_name}."""
     answers = client.decide({"journal_entry": transcript.strip()}, questions(project_names))
-    return parse(answers, project_names)
+    return parse(answers, project_names, thresholds=thresholds, project_confidence=project_confidence)
 
 
-def parse(answers, project_names):
-    """Jev's answers -> the classification, or ModelRefused if any answer is missing or malformed."""
+def parse(answers, project_names, *, thresholds=None, project_confidence=None):
+    """
+    Jev's answers -> the classification, or ModelRefused if any answer is missing or
+    malformed. The cut-offs default to config's; /v2 passes remote config's.
+    """
     scores = {name: _probability(answers.get(name), name) for name in CATEGORIES}
     project_name = None
     if project_names:
         answer = answers.get("project")
         choice = _choice(answer, "project", (*project_names, NO_PROJECT))
-        if choice != NO_PROJECT and _confidence(answer, choice) >= config.PROJECT_CONFIDENCE:
+        floor = config.PROJECT_CONFIDENCE if project_confidence is None else project_confidence
+        if choice != NO_PROJECT and _confidence(answer, choice) >= floor:
             project_name = choice
-    return {"categories": categories(scores), "category_scores": scores,
+    return {"categories": categories(scores, thresholds), "category_scores": scores,
             "mood": _choice(answers.get("mood"), "mood", MOODS), "project_name": project_name}
 
 

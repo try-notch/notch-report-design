@@ -15,14 +15,13 @@ If Jev fails, the chat model is asked once more with the extended `label_entry`
 classification is taken from that. `classified_by` records which path decided
 (the E2E reports the split); like the categories, it never reaches the wire.
 
-THE PROMPTS REUSE WHAT WAS MEASURED. The fallback's category policy is tagger.py's
-winning v4 text with the seed catalog, sent verbatim (TAGGING_EVAL.md scored it),
-and IMPACT NOTE / ACKNOWLEDGED BY / PROJECT MATCH are sliced out of
-prompt_variants._SHARED_TAIL, not pasted, so they cannot drift from what was
-measured. Import fails if those sections move. Only the rest is new: TAGS
-replaces AUTO TAGS, because wire tags are now the app's hashtags (2-5, never a
-project or category name: §3.4 stops mirroring the project into tags), and
-SUMMARY, TAKEAWAYS and MOOD are the fields a person actually reads.
+THE PROMPTS REUSE WHAT WAS MEASURED. They live in prompts.py as named variants
+(LABEL_V4 here): the fallback's category policy is tagger.py's winning v4 text with the
+seed catalog, and IMPACT NOTE / ACKNOWLEDGED BY / PROJECT MATCH are the measured
+prompt_variants._SHARED_TAIL sections, copied there and held equal to their source by
+tests/test_prompts.py. Only the rest is new: TAGS replaces AUTO TAGS, because wire tags
+are now the app's hashtags (2-5, never a project or category name: §3.4 stops mirroring
+the project into tags), and SUMMARY, TAKEAWAYS and MOOD are the fields a person reads.
 
 THE MODELS' ANSWERS ARE UNTRUSTED. openrouter.py does not check the arguments
 against the tool schema, so analyze_text() cleans up what can safely be cleaned
@@ -44,10 +43,7 @@ import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
 
-import prompt_variants
-import seed_db
-
-from . import classify, store
+from . import classify, prompts, store
 from .audio import AudioUnreadable
 from .classify import CATEGORIES, MOODS
 from .openrouter import ModelError, ModelRefused
@@ -62,8 +58,8 @@ VOCABULARY_LIMIT = 100  # most-used first, so a long history cannot crowd the pr
 
 def _copied_sections(tail):
     """
-    (IMPACT NOTE + ACKNOWLEDGED BY, PROJECT MATCH) from the measured tail, or fail
-    loudly if it changed.
+    (IMPACT NOTE + ACKNOWLEDGED BY, PROJECT MATCH) sliced from the measured tail, or fail
+    loudly if it changed. tests/test_prompts.py holds prompts.py's copies to this slice.
     """
     marks = [tail.find(f"\n{name}\n") for name in ("IMPACT NOTE", "ACKNOWLEDGED BY", "PROJECT MATCH")]
     if -1 in marks or marks != sorted(marks):
@@ -72,86 +68,11 @@ def _copied_sections(tail):
     return tail[marks[0]:marks[2]], tail[marks[2]:]
 
 
-if "{tag_catalog}" not in prompt_variants.V4_FIXED:
-    raise RuntimeError("prompt_variants.V4_FIXED lost its {tag_catalog} slot; the catalog would be dropped.")
-
-_CATALOG = prompt_variants.format_tag_catalog(
-    [{"name": name, "explanation": explanation} for name, explanation in seed_db.TAG_CATALOG])
-
-_WRITING = """
-Two sections below are the exception to "you are labelling": SUMMARY and TAKEAWAYS are
-read by the person, on their notch card.
-
-TAGS
-Free-form handles for what this entry is about. They are shown as hashtags on the notch
-and used to find it later: systems, kinds of work, the shape of the day. 'shipped',
-'pairing', 'flaky-tests', 'code-review', 'oncall', 'interviews'. Rules:
-- Lowercase, one to three words joined by '-'. No '#', no spaces.
-- Two to five of them.
-- REUSE BEFORE YOU COIN. The message lists the tags this user already has. If one fits,
-  use it verbatim, even if you would have phrased it differently. Coin a new one only when
-  nothing in the list covers the idea.
-- Never a project's name, and never one of the five report categories (wins,
-  collaboration, leadership, growth, challenges); both are recorded separately. Never a
-  person's name. Never a topic the entry doesn't mention.
-
-SUMMARY
-One or two sentences the person reads back later. Written to them: drop the 'I', and say
-'you' where a pronoun is needed. Concrete and plain: name what happened in their own terms,
-with no stock phrases and no praise or drama they didn't express.
-
-TAKEAWAYS
-One to three short sentences worth pulling out later: what got done, what was learned,
-what changed. Same voice as the summary. Each one stands on its own. No numbering, no
-bullets. Never add a fact, number or feeling the entry doesn't state.
-"""
-
-_MOOD = """
-MOOD
-How the day felt to the speaker, not how good the work was: 'up', 'flat' or 'down'. An
-uneventful day is 'flat'; good work on a day that wore them down can still be 'down'.
-"""
-
-_NOTES, _PROJECT_MATCH = _copied_sections(prompt_variants._SHARED_TAIL)
-
-# With Jev deciding: the writing only.
-SYSTEM_PROMPT = prompt_variants._SHARED_PREAMBLE + _WRITING + _NOTES
-# Without Jev: the measured v4 category prompt, extended with mood and project match.
-FALLBACK_PROMPT = (prompt_variants._SHARED_PREAMBLE + prompt_variants.V4_FIXED.replace("{tag_catalog}", _CATALOG)
-                   + _WRITING + _MOOD + _NOTES + _PROJECT_MATCH)
-
-
-def _closed(properties):
-    return {"type": "object", "properties": properties, "required": list(properties), "additionalProperties": False}
-
-
-_WRITTEN = {
-    "tags": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 5,
-             "description": "Two to five hashtag-style handles. See TAGS."},
-    "summary": {"type": "string", "description": "One or two sentences. See SUMMARY."},
-    "takeaways": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 3,
-                  "description": "One to three short sentences. See TAKEAWAYS."},
-    "impact_note": {"type": "string",
-                    "description": "The concrete result the entry states. Empty string if none."},
-    "acknowledged_by": {"type": "string",
-                        "description": "Name of whoever recognized the work. Empty string if nobody."},
-}
-LABEL_ENTRY = _closed(_WRITTEN)
-# Field names match the prompt's section names; `fixed_tags` is the v4 text's "FIXED TAGS".
-LABEL_ENTRY_FALLBACK = _closed({
-    "fixed_tags": {"type": "array", "items": {"type": "string", "enum": list(CATEGORIES)},
-                   "minItems": 1, "maxItems": 3,
-                   "description": "Every FIXED TAGS name that applies, exactly as written."},
-    **_WRITTEN,
-    "mood": {"type": "string", "enum": list(MOODS), "description": "See MOOD."},
-    "project_match": _closed({
-        "project_name": {"type": "string", "description": (
-            "A name copied verbatim from the active projects in the message. "
-            "Empty string if none clearly matches.")},
-        "confidence": {"type": "string", "enum": ["high", "low", "none"], "description": (
-            "'none' when project_name is empty. 'low' means the user should be asked to confirm.")},
-    }),
-})
+# The v1 names for the one variant v1 runs (prompts.LABEL_V4).
+SYSTEM_PROMPT = prompts.LABEL_V4.system
+FALLBACK_PROMPT = prompts.LABEL_V4.fallback_system
+LABEL_ENTRY = prompts.LABEL_V4.schema
+LABEL_ENTRY_FALLBACK = prompts.LABEL_V4.fallback_schema
 
 
 # ---------------------------------------------------------------------------
@@ -182,45 +103,62 @@ def _strings(value):
     return [v for v in value if isinstance(v, str)] if isinstance(value, list) else []
 
 
-def analyze_text(client, transcript, *, project_names, vocabulary):
+def analyze_text(client, transcript, *, project_names, vocabulary, labels=prompts.LABEL_V4, classifier="jev",
+                 max_tokens=MAX_TOKENS, thresholds=None, project_confidence=None):
     """
-    The chat model's writing and Jev's decisions, side by side -> a normalised result:
+    The chat model's writing and a classification, side by side -> a normalised result:
     {tags, summary, takeaways, impact_note, acknowledged_by, categories, category_scores,
     mood, project_name, classified_by}.
 
-    If Jev fails, the chat model classifies instead (category_scores None, classified_by
-    'llm'). Raises ModelRefused when the writing has no summary, or the fallback an
-    unknown mood, since a complete entry must have both; everything else is cleaned
-    rather than refused. Any other ModelError from the chat model propagates.
+    classifier "jev" (v1, and /v2 when remote config says so): Jev decides; if Jev
+    fails, the chat model classifies instead (category_scores None, classified_by
+    'llm'). classifier "chat": the chat model classifies from the start, beside the
+    writing, with no Jev call at all. Raises ModelRefused when the writing has no
+    summary, or the chat classification an unknown mood, since a complete entry must
+    have both; everything else is cleaned rather than refused. Any other ModelError
+    from the chat model propagates.
     """
     user = _user_message(transcript, project_names, vocabulary)
+    chat = dict(labels=labels, max_tokens=max_tokens)
+    if classifier == "chat":
+        with ThreadPoolExecutor(1) as pool:
+            decided = pool.submit(_label_fallback, client, user, **chat)
+            written = _write(client, user, project_names, **chat)
+            return written | decided.result() | {"category_scores": None, "classified_by": "llm"}
     with ThreadPoolExecutor(1) as pool:
-        decided = pool.submit(classify.classify, client, transcript, project_names=project_names)
-        written = _write(client, user, project_names)
+        decided = pool.submit(classify.classify, client, transcript, project_names=project_names,
+                              thresholds=thresholds, project_confidence=project_confidence)
+        written = _write(client, user, project_names, **chat)
         try:
             return written | decided.result() | {"classified_by": "jev"}
         except ModelError as exc:
-            log.warning("Jev could not classify (%s: %s); asking the chat model", exc.code, exc.message)
-    fallback = classify_by_chat(client, transcript, project_names=project_names, vocabulary=vocabulary)
+            # The code only: a ModelError's message can quote a provider's reply.
+            log.warning("Jev could not classify (%s); asking the chat model", exc.code)
+    fallback = _label_fallback(client, user, **chat)
     return written | fallback | {"category_scores": None, "classified_by": "llm"}
 
 
-def classify_by_chat(client, transcript, *, project_names=(), vocabulary=()):
+def classify_by_chat(client, transcript, *, project_names=(), vocabulary=(), labels=prompts.LABEL_V4,
+                     max_tokens=MAX_TOKENS):
     """
     The chat model's classification with the measured v4 prompt -> {categories, mood,
     project_name}. analyze_text's fallback when Jev fails; eval_categories scores it.
     """
-    user = _user_message(transcript, project_names, vocabulary)
-    return _label(client, user, FALLBACK_PROMPT, LABEL_ENTRY_FALLBACK, _classified)
+    return _label_fallback(client, _user_message(transcript, project_names, vocabulary),
+                           labels=labels, max_tokens=max_tokens)
 
 
-def _label(client, user, system, parameters, parse):
+def _label_fallback(client, user, *, labels, max_tokens):
+    return _label(client, user, labels.fallback_system, labels.fallback_schema, _classified, max_tokens)
+
+
+def _label(client, user, system, parameters, parse, max_tokens=MAX_TOKENS):
     """label_entry, read by `parse`; the client asks once more if `parse` refuses the answer."""
     return client.tool_call(
         system=system, user=user, tool_name="label_entry",
         description="Label one Notch journal entry and write its summary.", parameters=parameters,
         # Labelling wants the single most likely answer, as in tagger.py.
-        temperature=0.0, max_tokens=MAX_TOKENS, parse=parse)
+        temperature=0.0, max_tokens=max_tokens, parse=parse)
 
 
 def _written(raw):
@@ -252,9 +190,9 @@ def _classified(raw):
     }
 
 
-def _write(client, user, project_names, parse=_written):
+def _write(client, user, project_names, parse=_written, *, labels=prompts.LABEL_V4, max_tokens=MAX_TOKENS):
     """label_entry's writing, less any tag that is a project's name (§3.4: the project is not a tag)."""
-    written = _label(client, user, SYSTEM_PROMPT, LABEL_ENTRY, parse)
+    written = _label(client, user, labels.system, labels.schema, parse, max_tokens)
     projects = {store.normalize_tag(name) for name in project_names}
     return written | {"tags": [t for t in written["tags"] if t not in projects]}
 
@@ -267,13 +205,15 @@ def _rewritten(raw):
     return written
 
 
-def write_takeaways(client, transcript, *, project_names, vocabulary):
+def write_takeaways(client, transcript, *, project_names, vocabulary, labels=prompts.LABEL_V4,
+                    max_tokens=MAX_TOKENS):
     """
-    POST /v1/entries/{id}/takeaways: the writing half of analyze_text alone, the same call
-    and the same cleaning, -> {takeaways, tags}. Jev is not asked: nothing it decides is
-    rewritten. Any ModelError propagates, and nothing is written anywhere.
+    POST /v1/entries/{id}/takeaways and /v2/takeaways: the writing half of analyze_text
+    alone, the same call and the same cleaning, -> {takeaways, tags}. Jev is not asked:
+    nothing it decides is rewritten. Any ModelError propagates, and nothing is written anywhere.
     """
-    written = _write(client, _user_message(transcript, project_names, vocabulary), project_names, _rewritten)
+    written = _write(client, _user_message(transcript, project_names, vocabulary), project_names, _rewritten,
+                     labels=labels, max_tokens=max_tokens)
     return {"takeaways": written["takeaways"], "tags": written["tags"]}
 
 

@@ -86,3 +86,31 @@ def test_a_snapshot_counts_as_someone_watching():
     assert not sources.watching()
     web.get("api/snapshot")
     assert sources.watching()
+
+
+@pytest.mark.parametrize("forwarded_for, status", [
+    ("100.101.102.103", 200),            # a tailnet device, through `tailscale serve`
+    ("fd7a:115c:a1e0::1234", 200),       # the same over Tailscale's IPv6
+    ("192.168.1.20", 403),               # not the tailnet
+    ("100.63.255.255", 403),             # just outside 100.64.0.0/10
+    ("100.101.102.103, 8.8.8.8", 403),   # every hop must be trusted
+], ids=["tailnet-v4", "tailnet-v6", "lan", "outside-cgnat", "mixed"])
+def test_on_the_vps_a_tailnet_address_is_trusted_only_when_asked(forwarded_for, status):
+    from notch_dash.settings import TAILNET
+
+    headers = {"X-Forwarded-For": forwarded_for}
+    assert client(trusted_forwarders=TAILNET).get("api/snapshot", headers=headers).status_code == status
+    assert client().get("api/snapshot", headers=headers).status_code == 403
+
+
+def test_the_environment_adds_hosts_and_the_tailnet():
+    from notch_dash.settings import TAILNET
+
+    settings = Settings.from_env({"NOTCH_DASH_HOSTS": "notch-vps.tail1234.ts.net, other.ts.net",
+                                  "NOTCH_DASH_TAILNET": "1"})
+    assert settings.allowed_hosts[-2:] == ("notch-vps.tail1234.ts.net", "other.ts.net")
+    assert settings.trusted_forwarders == TAILNET
+    assert Settings.from_env({}).trusted_forwarders == ()
+    web = client(allowed_hosts=settings.allowed_hosts, trusted_forwarders=TAILNET)
+    assert web.get("api/snapshot", headers={"Host": "notch-vps.tail1234.ts.net",
+                                            "X-Forwarded-For": "100.64.0.9"}).status_code == 200

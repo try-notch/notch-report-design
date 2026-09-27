@@ -23,19 +23,37 @@ Knobs: `fail_with` (an exception instance raised by every call while it is set),
 `overrides` ({tool_name or "decide": {field: value}} merged over the canned answer,
 NOT schema-checked, so a test can feed the caller deliberately messy model output),
 and `calls` (every call, in order, as (method, kwargs)).
+
+/v2 binds the client per request, as it does the real one: `bound(deadline=, usage=,
+models=, provider=)` answers the same way and also writes a Usage call per answer
+(`cost` dollars, the provider the fake says served it, a generation id), honours the
+deadline (`delay` seconds per call, cut short by it), and notes each call's model and
+provider block in `routed`. `generation(id)` and `zdr_endpoints()` answer zdr.py from
+what the fake served and its `zdr` list, so a test picks a ZDR hit or a miss by naming
+the provider: stt_provider / jev_provider / chat_provider.
 """
 
+import itertools
+import json
+import os
 import re
+import time
 
 import jsonschema
 
 from .audio import AudioUnreadable
-from .openrouter import ModelRefused, TranscriptionFailed
+from .config import CHAT_MODEL, JEV_MODEL, STT_MODEL
+from .identity import AppleCodeRejected
+from .openrouter import DeadlineExceeded, ModelRefused, TranscriptionFailed
+from .speech import Probe
 from .store import normalize_tag
+from .wire_v2 import Refusal
 
 # Audio that starts with this marker transcribes to the UTF-8 text after it, so a
 # test chooses its transcript by choosing its upload bytes.
 TEXT_MARKER = b"NOTCH-TEXT:"
+# A /v2 upload FakeAudio reads as a recording: a JSON header line (its length, its pauses), then its words.
+AUDIO_MARKER = b"NOTCH-AUDIO:"
 
 DEFAULT_TRANSCRIPT = (
     "Paired with Dana on the Front-End Refactor this afternoon and we finally shipped "
@@ -57,6 +75,55 @@ _CATEGORY_KEYWORDS = {"wins": ("shipped", "fixed", "merged", "launched"),
 _HIT, _MISS = 0.9, 0.1
 
 
+def fake_recording(text, seconds=None, silences=(), passthrough=True):
+    """
+    Upload bytes FakeAudio reads as a recording of `text`: `seconds` long (0.4 s a word
+    unless given), with pauses at `silences` [(start, end)], already in the app's own
+    format unless `passthrough` is False.
+    """
+    length = seconds if seconds is not None else max(1.0, round(0.4 * len(text.split()), 2))
+    header = {"seconds": length, "silences": [list(pause) for pause in silences], "passthrough": passthrough}
+    return AUDIO_MARKER + json.dumps(header).encode() + b"\n" + text.encode()
+
+
+class FakeAudio:
+    """
+    Stands in for speech.FFmpeg. A fake_recording() probes as the length and pauses it
+    declares; any other bytes are AudioUnreadable. A piece "encodes" to TEXT_MARKER plus
+    the words spoken inside it (words are spread evenly over the recording), so
+    FakeClient transcribes each piece to exactly its own words and the joined transcript
+    is the recording's text. Like ffmpeg it writes, then removes, its output file.
+    """
+
+    def __init__(self):
+        self.probes, self.encodes = [], []
+
+    @staticmethod
+    def _read(path):
+        with open(path, "rb") as f:
+            data = f.read()
+        if not data.startswith(AUDIO_MARKER):
+            raise AudioUnreadable()
+        header, _, text = data[len(AUDIO_MARKER):].partition(b"\n")
+        return json.loads(header), text.decode("utf-8")
+
+    def probe(self, path, demuxer, deadline=None):
+        header, _ = self._read(path)
+        self.probes.append(demuxer)
+        return Probe(float(header["seconds"]), [tuple(p) for p in header["silences"]], bool(header["passthrough"]))
+
+    def encode(self, path, demuxer, out, start=None, end=None, deadline=None):
+        header, text = self._read(path)
+        with open(out, "wb") as f:
+            f.write(b"encoded")
+        os.remove(out)
+        seconds, words = float(header["seconds"]), text.split()
+        start, end = start or 0.0, seconds if end is None else end
+        spoken = [w for n, w in enumerate(words) if start <= (n + 0.5) * seconds / len(words) < end]
+        self.encodes.append((start, end))
+        return TEXT_MARKER + " ".join(spoken).encode()
+
+
 def fake_transcode(data):
     """Stands in for audio.to_m4a_16k: passes bytes through, so TEXT_MARKER survives."""
     if not data:
@@ -64,11 +131,39 @@ def fake_transcode(data):
     return data
 
 
+# What the fake's zdr_endpoints() lists: OpenRouter's shape, reduced to what zdr.py reads.
+ZDR_ENDPOINTS = (
+    {"provider": "DeepInfra", "model": "openai/whisper-large-v3"},
+    {"provider": "Groq", "model": "openai/whisper-large-v3"},
+    {"provider": "TypeSafe", "model": "typesafe/jev-1.13-20260917"},
+    {"provider": "DeepInfra", "model": "deepseek/deepseek-v4-pro-0813"},
+)
+
+
 class FakeClient:
-    def __init__(self, *, fail_with=None, overrides=None):
+    def __init__(self, *, fail_with=None, overrides=None, cost=0.001, delay=0.0, stt_provider="DeepInfra",
+                 jev_provider="TypeSafe", chat_provider="DeepInfra", zdr=ZDR_ENDPOINTS):
         self.fail_with = fail_with
         self.overrides = overrides or {}
         self.calls = []
+        self.cost, self.delay = cost, delay
+        self.stt_provider, self.jev_provider, self.chat_provider = stt_provider, jev_provider, chat_provider
+        self.zdr = [dict(e) for e in zdr]
+        self.routed = []            # bound calls: {"method", "model", "provider"}
+        self.generations = {}       # generation id -> {"provider", "model"}
+        self.metadata_calls = []    # ("generation", id) / ("zdr",)
+        self._ids = itertools.count(1)
+
+    def bound(self, *, deadline=None, usage=None, models=None, provider=None):
+        return _BoundFake(self, deadline, usage, models or {}, provider)
+
+    def generation(self, generation_id):
+        self.metadata_calls.append(("generation", generation_id))
+        return self.generations.get(generation_id)
+
+    def zdr_endpoints(self):
+        self.metadata_calls.append(("zdr",))
+        return [dict(e) for e in self.zdr]
 
     def _record(self, method, **kwargs):
         self.calls.append((method, kwargs))
@@ -77,6 +172,8 @@ class FakeClient:
 
     def transcribe(self, audio, *, fmt="m4a", language="en"):
         self._record("transcribe", audio=audio, fmt=fmt, language=language)
+        if audio.startswith(AUDIO_MARKER):  # a fake_recording() sent whole, as the app's own format is
+            audio = TEXT_MARKER + audio.partition(b"\n")[2]
         if not audio.startswith(TEXT_MARKER):
             return DEFAULT_TRANSCRIPT
         text = audio[len(TEXT_MARKER):].decode("utf-8").strip()
@@ -167,3 +264,74 @@ def _write_report(user):
         ],
         "themes": ["shipped", "pairing", "momentum"],
     }
+
+
+class _BoundFake:
+    """FakeClient.bound(): the same answers, metered and deadline-bound like OpenRouterClient.bound()."""
+
+    def __init__(self, fake, deadline, usage, models, provider):
+        self._fake, self._deadline, self._usage = fake, deadline, usage
+        self._models, self._provider = models, provider
+
+    def _call(self, method, kind, model, provider, answer, measure=lambda result: {}):
+        self._fake.routed.append({"method": method, "model": model, "provider": self._provider})
+        if self._usage is not None:
+            self._usage.reached()
+        if self._fake.delay:
+            left = self._deadline.remaining() if self._deadline is not None else self._fake.delay
+            time.sleep(max(0.0, min(self._fake.delay, left)))
+        if self._deadline is not None and self._deadline.expired():
+            raise DeadlineExceeded("The request's deadline ran out waiting for the model.")
+        result = answer()
+        extra = measure(result)
+        generation_id = f"gen-fake-{next(self._fake._ids)}"
+        self._fake.generations[generation_id] = {"provider": provider, "model": model}
+        if self._usage is not None:
+            self._usage.add({"kind": kind, "model": model, "provider": provider, "generation_id": generation_id,
+                             "cost": self._fake.cost, "prompt_tokens": extra.get("prompt_tokens"),
+                             "completion_tokens": extra.get("completion_tokens"), "seconds": extra.get("seconds")})
+        return result
+
+    def transcribe(self, audio, *, fmt="m4a", language="en"):
+        model = self._models.get("stt", STT_MODEL)
+        # The provider bills what it heard: a word takes the fake about 0.4 s.
+        return self._call("transcribe", "stt", model, self._fake.stt_provider,
+                          lambda: self._fake.transcribe(audio, fmt=fmt, language=language),
+                          lambda text: {"seconds": round(0.4 * len(text.split()), 2)})
+
+    def tool_call(self, **kwargs):
+        model = self._models.get("chat", CHAT_MODEL)
+        return self._call("tool_call", "chat", model, self._fake.chat_provider,
+                          lambda: self._fake.tool_call(**kwargs),
+                          lambda _: {"prompt_tokens": 100, "completion_tokens": 50})
+
+    def decide(self, state, questions):
+        model = self._models.get("classifier", JEV_MODEL)
+        return self._call("decide", "classify", model, self._fake.jev_provider,
+                          lambda: self._fake.decide(state, questions))
+
+
+class FakeApple:
+    """Stands in for identity.AppleRevoker: records each code; `reject` or `down` make it refuse."""
+
+    def __init__(self, *, reject=False, down=False):
+        self.codes, self.reject, self.down = [], reject, down
+
+    def revoke(self, code):
+        self.codes.append(code)
+        if self.down:
+            raise Refusal("unavailable")
+        if self.reject:
+            raise AppleCodeRejected()
+
+
+class FakeSupabaseAdmin:
+    """Stands in for identity.SupabaseAdmin: records each deleted user; `down` makes it refuse."""
+
+    def __init__(self, *, down=False):
+        self.deleted, self.down = [], down
+
+    def delete_user(self, user_id):
+        if self.down:
+            raise Refusal("unavailable")
+        self.deleted.append(user_id)

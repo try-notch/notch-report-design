@@ -23,16 +23,14 @@ import sqlite3
 from collections import Counter
 from datetime import date, timedelta
 
-import llm
-
-from . import store
+from . import prompts, store
 from .classify import CATEGORIES  # the five: context for the writer, never labels
 from .openrouter import ModelError, ModelRefused
 
 log = logging.getLogger(__name__)
 
-REPORT_TYPES = ("week", "month", "quarter", "year", "custom")
-HIGHLIGHT_KINDS = ("milestone", "shipped", "collaboration", "note")
+REPORT_TYPES = prompts.REPORT_TYPES
+HIGHLIGHT_KINDS = prompts.HIGHLIGHT_KINDS
 TRANSCRIPTS_UP_TO = 60            # above this many notches the prompt carries summaries only
 _ADJECTIVE = {"week": "Weekly", "month": "Monthly", "quarter": "Quarterly", "year": "Yearly", "custom": "Custom"}
 
@@ -199,79 +197,9 @@ def _scope(conn, user_id, req, tz):
 # The writing job.
 # ---------------------------------------------------------------------------
 
-def _borrowed_rules():
-    """The demo writer's VOICE, strengths constraint and uncounted-work paragraphs, sliced so they cannot drift."""
-    prompt = llm.SYSTEM_PROMPT
-    block = prompt[prompt.index("VOICE\n"):prompt.index("\n\nDATES\n")]
-    for header in ("VOICE", "HARD CONSTRAINT ON STRENGTHS & GROWTH", "WORK THAT DOESN'T USUALLY GET COUNTED"):
-        assert f"{header}\n" in block, f"llm.SYSTEM_PROMPT no longer has its {header} paragraph"
-    return block
-
-
-SYSTEM_PROMPT = f"""You are the report writer for Notch, a voice-first career impact tracker.
-
-People speak short notches about their work days. You turn the notches in one date range into
-a short report document in the Notch app: a page they will want to read, keep and bring to a
-review.
-
-{_borrowed_rules()}
-
-THE DOCUMENT
-- headline: a short, evocative title for the period, at most 7 words, no colon, built from a
-  specific event or phrase in these notches. It is not the date range; the app shows that
-  separately.
-- lede: 1-2 sentences on what the period was mostly about.
-- body: 1-3 short paragraphs separated by a blank line. Carry, in this order: what is working;
-  one direction that builds on a strength (the shape above); at most one piece of work that
-  doesn't usually get counted, if there is one; and a forward frame, something concrete the
-  person might do or say next. Not "keep up the great work". Parts may share a paragraph, and
-  are never labelled (no "What's working:").
-- highlights: 2-4 moments worth a card. title is 2-5 words naming the moment; detail is one
-  clause on how it went; kind is shipped, collaboration or note, or milestone only for a notch
-  marked milestone; source_entry_ids lists the [id ...] values of the notches it rests on,
-  copied exactly.
-- themes: 3-5 hashtag-style handles for the period: lowercase, 1-3 words joined by hyphens, no
-  '#'. Prefer handles the notches already carry in their tags. Never a project's name: projects
-  have their own breakdown.
-Word the headline, titles and details from these notches, never from these instructions. Where
-the sections before THE DOCUMENT say otherwise (they pick 1-2 uncounted entries), THE DOCUMENT
-wins.
-
-NUMBERS RULE
-State a number only as the FACTS block or a notch states it, copied exactly. Never compute,
-round, estimate or total anything. Write no dates: say "early in the week" or "mid-month".
-
-The CATEGORY COUNTS block (wins, collaboration, leadership, growth, challenges) is for your
-understanding only. Never name a category or state its count in the prose, and never use one as
-a label, heading or theme."""
-
-WRITE_REPORT = {
-    "type": "object",
-    "properties": {
-        "headline": {"type": "string", "description": "A short evocative title: at most 7 words, no colon."},
-        "lede": {"type": "string", "description": "1-2 sentences on what the period was mostly about."},
-        "body": {"type": "string", "description": "1-3 short paragraphs separated by a blank line."},
-        "highlights": {
-            "type": "array", "minItems": 2, "maxItems": 4,
-            "items": {
-                "type": "object",
-                "properties": {
-                    "title": {"type": "string", "description": "2-5 words."},
-                    "detail": {"type": "string", "description": "One clause."},
-                    "kind": {"type": "string", "enum": list(HIGHLIGHT_KINDS)},
-                    "source_entry_ids": {"type": "array", "items": {"type": "string"},
-                                         "description": "The [id ...] values it rests on, copied exactly."},
-                },
-                "required": ["title", "detail", "kind", "source_entry_ids"],
-                "additionalProperties": False,
-            },
-        },
-        "themes": {"type": "array", "minItems": 3, "maxItems": 5, "items": {"type": "string"},
-                   "description": "Hashtag-style handles: lowercase, words joined by '-', no '#'."},
-    },
-    "required": ["headline", "lede", "body", "highlights", "themes"],
-    "additionalProperties": False,
-}
+# The writer's prompt and tool: prompts.REPORT_R1, the one variant v1 runs.
+SYSTEM_PROMPT = prompts.REPORT_R1.system
+WRITE_REPORT = prompts.REPORT_R1.schema
 
 
 def run_report_job(db_path, job_id, *, client):
