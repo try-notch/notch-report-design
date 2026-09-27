@@ -114,16 +114,23 @@ def _snapshot(db, now):
         "deleted": one("SELECT count(*) FROM deleted_accounts"),
         "cloud": one("SELECT count(*) FROM cloud_keycheck"),
     }
+    # Active: the app fetched its config signed in (active_days) or made a processing call that
+    # day. Either alone undercounts: a phone with a fresh config processes without asking again.
+    seen = ("(SELECT user_id, day, platform, app_version FROM active_days WHERE day >= ?1 "
+            "UNION SELECT user_id, day, platform, app_version FROM usage_events WHERE day >= ?1)")
+
+    def active_since(day):
+        return one(f"SELECT count(DISTINCT user_id) FROM {seen}", day)
+
     active = {
-        "today": one("SELECT count(DISTINCT user_id) FROM active_days WHERE day = ?", today),
-        "7d": one("SELECT count(DISTINCT user_id) FROM active_days WHERE day >= ?", since),
-        "30d": one("SELECT count(DISTINCT user_id) FROM active_days WHERE day >= ?", _days_back(today, 30)[-1]),
+        "today": active_since(today),
+        "7d": active_since(since),
+        "30d": active_since(_days_back(today, 30)[-1]),
     }
 
     daily = {d: {"day": d, "active": 0, "notches": 0, "analyses": 0, "rewrites": 0, "reports": 0,
                  "failed": 0, "rejected": 0, "limited": 0, "cost_usd": 0.0} for d in days}
-    for day, count in rows("SELECT day, count(DISTINCT user_id) FROM active_days WHERE day >= ? GROUP BY day",
-                           days[-1]):
+    for day, count in rows(f"SELECT day, count(DISTINCT user_id) FROM {seen} GROUP BY day", days[-1]):
         if day in daily:
             daily[day]["active"] = count
     for day, kind, status, code, count in rows(
@@ -191,7 +198,7 @@ def _snapshot(db, now):
                "GROUP BY kind, zdr ORDER BY kind, zdr", since)]
     versions = [{"platform": platform or "?", "app_version": version or "?", "accounts": count}
                 for platform, version, count in rows(
-                    "SELECT platform, app_version, count(DISTINCT user_id) FROM active_days WHERE day >= ? "
+                    f"SELECT platform, app_version, count(DISTINCT user_id) FROM {seen} WHERE app_version IS NOT NULL "
                     "GROUP BY platform, app_version ORDER BY 3 DESC LIMIT 10", since)]
     top = [{"account": user_id[:8], "notches": notches, "calls": calls, "cost_usd": round(cost or 0.0, 6)}
            for user_id, notches, calls, cost in rows(
