@@ -40,6 +40,8 @@ class Settings:
     port: int = PORT
     allowed_hosts: tuple = _hosts(PORT)  # the Host header a request must carry (DNS rebinding)
     trusted_forwarders: tuple = ()        # networks, besides loopback, X-Forwarded-For may name
+    bind: str = "127.0.0.1"               # the interface uvicorn listens on
+    behind_auth_proxy: bool = False       # a proxy that authenticates every request stands in front
 
     @classmethod
     def from_env(cls, environ=os.environ):
@@ -57,4 +59,6 @@ class Settings:
                    notch_port=int(environ.get("NOTCH_PORT") or config.PORT), port=port,
                    allowed_hosts=_hosts(port, [h.strip() for h in (environ.get("NOTCH_DASH_HOSTS") or "").split(",")
                                                if h.strip()]),
-                   trusted_forwarders=TAILNET if environ.get("NOTCH_DASH_TAILNET") == "1" else ())
+                   trusted_forwarders=TAILNET if environ.get("NOTCH_DASH_TAILNET") == "1" else (),
+                   bind=environ.get("NOTCH_DASH_BIND") or "127.0.0.1",
+                   behind_auth_proxy=environ.get("NOTCH_DASH_AUTH_PROXY") == "1")

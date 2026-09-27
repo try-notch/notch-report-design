@@ -187,7 +187,7 @@ def create_app(settings, *, http=None, run=subprocess.run, clock=time.time, star
     async def guard(request: Request, call_next):
         if request.headers.get("host") not in settings.allowed_hosts:
             response = PlainTextResponse("Misdirected request.", 421)
-        elif not _from_this_mac(request, settings.trusted_forwarders):
+        elif not settings.behind_auth_proxy and not _from_this_mac(request, settings.trusted_forwarders):
             response = PlainTextResponse("Only this Mac can see it.", 403)
         elif request.method not in ("GET", "HEAD"):
             response = PlainTextResponse("Read only.", 405, headers={"Allow": "GET, HEAD"})

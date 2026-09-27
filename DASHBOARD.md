@@ -50,6 +50,8 @@ NOTCH_DASH_GATE_SECRET_FILE=/path/to/gate-secret \
 | `OPENROUTER_API_KEY` | read from `.env` (loaded when `notch_api.config` is imported) | Used only for `GET /api/v1/key` (spend). |
 | `NOTCH_DASH_HOSTS` | none | Extra `Host` values to answer, comma-separated. On the VPS: the machine's tailnet name (`<machine>.<tailnet>.ts.net`), which `tailscale serve` passes through. |
 | `NOTCH_DASH_TAILNET` | off | `1` trusts Tailscale's address ranges (`100.64.0.0/10`, `fd7a:115c:a1e0::/48`) in `X-Forwarded-For`, where `tailscale serve` names the tailnet device it was reached from. Only for a machine where nothing but `tailscale serve` can reach the dashboard (DEPLOY.md). |
+| `NOTCH_DASH_BIND` | `127.0.0.1` | The interface uvicorn listens on. The VPS's container sets `0.0.0.0`; its port is still published on the host's 127.0.0.1 only. |
+| `NOTCH_DASH_AUTH_PROXY` | off | `1` answers any client an authenticating proxy forwarded, skipping the this-machine check. Only where that proxy is the one way in: on the VPS, Caddy's `basic_auth` at `dash.trynotch.xyz` (DEPLOY.md › 6), set in the untracked `compose.override.yaml`. |
 
 ## Sources and cadence
 

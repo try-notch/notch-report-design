@@ -188,34 +188,40 @@ A signed-in check needs a real Supabase session token: sign in from a TestFlight
 watch `journalctl -u notch-api -f` while it calls `GET /v2/config` (the line has
 `"kind": "config"` and `"status": 200`).
 
-## 6. The dashboard over Tailscale (owner only)
+## 6. The dashboard at dash.trynotch.xyz (password)
 
-The dashboard binds 127.0.0.1:4130 and no Caddy site serves it. It is reachable only through
-`tailscale serve`, from devices on your tailnet.
+The dashboard runs as the `dash` service in `compose.yaml`, from the API's own image: it shares
+the `api` container's network (so its health probe on 127.0.0.1:4131 reaches the server), reads
+the `meter` volume read-only, and publishes 4130 on the host's 127.0.0.1 only. Caddy serves it at
+`dash.trynotch.xyz` behind `basic_auth`, and the dashboard trusts that gate and nothing else.
 
-1. Install Tailscale on the VPS and join your tailnet (this prints a login URL to open):
+1. **Retire the systemd dashboard first.** `setup.sh` installed `notch-dash.service` on
+   127.0.0.1:4130; while it runs, the containers cannot publish 4130 and **the API does not
+   start either** (both ports belong to the `api` container):
    ```bash
-   curl -fsSL https://tailscale.com/install.sh | sh
-   sudo tailscale up
+   sudo systemctl disable --now notch-dash
    ```
-2. In the Tailscale admin console, under **DNS**, turn on **MagicDNS** and **HTTPS Certificates**.
-   Under **Machines**, disable key expiry for this machine if you don't want to re-authenticate it.
-3. Serve the dashboard to the tailnet (HTTPS on the machine's tailnet name; it survives reboots):
-   ```bash
-   sudo tailscale serve --bg --https=443 http://127.0.0.1:4130
-   tailscale serve status
+2. DNS, DNS only: `A dash → <VPS IPv4>` and `AAAA dash → <VPS IPv6>`.
+3. On the VPS, `~/notch/compose.override.yaml` (untracked; the Mac never has it):
+   ```yaml
+   services:
+     dash:
+       environment:
+         NOTCH_DASH_AUTH_PROXY: "1"
    ```
-   `tailscale serve` answers only on the machine's tailnet address, so it does not collide with
-   Caddy's public :443, and ufw needs no change for it. (If the two ever did collide, serve on
-   another port: `--https=8443`, and open `https://<machine>.<tailnet>.ts.net:8443/`.)
-4. Tell the dashboard its tailnet name, which `tailscale serve` passes through as the Host:
-   ```bash
-   tailscale status --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))'
-   sudo -e /etc/notch/dash.env     # NOTCH_DASH_HOSTS=<that name>, NOTCH_DASH_TAILNET=1
-   sudo systemctl restart notch-dash
+4. The login: make a random password on the Mac, keep it somewhere private, and put only its
+   hash on the VPS (`caddy hash-password --plaintext <password>`). Append a site to
+   `/etc/caddy/Caddyfile`:
    ```
-5. Open `https://<machine>.<tailnet>.ts.net/` from a device on the tailnet. Use tailnet ACLs if
-   only some people should reach it. To stop serving it: `sudo tailscale serve reset`.
+   dash.trynotch.xyz {
+   	basic_auth {
+   		notch <bcrypt hash>
+   	}
+   	reverse_proxy 127.0.0.1:4130
+   }
+   ```
+   then `sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile && sudo systemctl reload caddy`.
+5. `cd ~/notch && sudo docker compose up -d --build`, and open `https://dash.trynotch.xyz`.
 
 On the VPS the dashboard's Mac sources (the /v1 database, Caddy's log, the tunnel, the phone)
 are switched off in `dash.env`; it shows the API's health and OpenRouter key spend. Panels over

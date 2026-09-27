@@ -27,6 +27,8 @@ services:
       APPLE_PRIVATE_KEY_PATH: /run/notch-secrets/apple-signin.p8
     ports:
       - "127.0.0.1:${NOTCH_HOST_PORT:-4131}:4131"
+      # The dashboard shares this container's network (`dash` below), so its port is published here.
+      - "127.0.0.1:${NOTCH_DASH_HOST_PORT:-4130}:4130"
     volumes:
       - meter:/data
       - ./secrets:/run/notch-secrets:ro
@@ -37,6 +39,42 @@ services:
       - no-new-privileges:true
     cap_drop: [ALL]
     mem_limit: 3g
+
+  # The dashboard (DASHBOARD.md): metadata only, read-only, from the same image. It shares the
+  # api container's network, so its /healthz probe on 127.0.0.1:4131 reaches the server, and it
+  # reads the `meter` volume without writing to it. On the VPS, Caddy serves it at
+  # dash.trynotch.xyz behind a password and compose.override.yaml (untracked) sets
+  # NOTCH_DASH_AUTH_PROXY=1 so it trusts that gate; anywhere else it answers this machine only.
+  dash:
+    image: notch-api:latest
+    command: ["python", "-m", "notch_dash"]
+    restart: unless-stopped
+    depends_on: [api]
+    network_mode: "service:api"
+    environment:
+      NOTCH_DASH_BIND: 0.0.0.0
+      NOTCH_DASH_PORT: "4130"
+      NOTCH_DASH_HOSTS: ${NOTCH_DASH_HOSTS:-dash.trynotch.xyz}
+      NOTCH_DASH_AUTH_PROXY: ${NOTCH_DASH_AUTH_PROXY:-}
+      NOTCH_PORT: "4131"
+      NOTCH_METRICS: /data/metrics.jsonl       # one line per model call: kind, model, latency, cost
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}  # spend only (GET /api/v1/key)
+      # The v1 harness's sources don't exist here: off, so the page says so.
+      NOTCH_DB: ""
+      NOTCH_AUDIO_DIR: ""
+      NOTCH_DASH_CADDY_LOG: ""
+      NOTCH_DASH_SERVER_LOG: ""
+      NOTCH_DASH_TUNNEL_LOG: ""
+      NOTCH_DASH_TUNNEL_METRICS: ""
+      NOTCH_DASH_GATE_SECRET_FILE: ""
+      NOTCH_DASH_DEVICE: ""
+    volumes:
+      - meter:/data:ro
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    mem_limit: 512m
 
 volumes:
   meter:
