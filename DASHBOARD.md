@@ -30,6 +30,27 @@ NOTCH_DASH_GATE_SECRET_FILE=/path/to/gate-secret \
 - **Listening:** uvicorn binds 127.0.0.1 only and answers only GET and HEAD. Caddy, in front of it, listens on every interface, so the dashboard also refuses what Caddy forwarded from another machine (see Security).
 - **No new dependencies:** it uses fastapi, uvicorn and httpx from the existing venv.
 
+## The usage page (the fleet)
+
+`/usage` (and `/` on the VPS, where `NOTCH_DASH_HOME=usage`) is for the team: how Notch is used
+across every account, from the /v2 server's meter database (`notch_dash/usage.py`, `GET /api/usage`).
+Counts, timings, costs and codes only, the same rule as the rest of the page: the meter holds no
+notch content, Notch Cloud's ciphertext is never read, and an account shows only as the first
+eight characters of its Supabase id. Days are UTC, the meter's own.
+
+- **Today and the last 7 days:** active accounts, notches, reports, spend against the global
+  daily cap, cost per notch, the share of calls that failed, and accounts at the daily notch cap.
+- **Day by day** (14 days): active accounts, notches, write-ups, reports, failures, calls refused
+  by the daily limit, spend.
+- **Processing time:** each call's p50, p95 and slowest, on the server (start to finish).
+- **Problems:** failed and refused calls by code, with how many accounts they touched, and what is
+  in flight now (and past its deadline).
+- **Accounts:** total, new this week, Notch Cloud on, blocked, deleted; the top accounts today by
+  spend against the per-account cap.
+- **Models, zero data retention, app versions.**
+
+A read is cached for ten seconds; the page refreshes every fifteen.
+
 ## Environment
 
 **Turning a source off:** set any optional source to an empty string. The snapshot then reports it as `off`.
@@ -50,6 +71,8 @@ NOTCH_DASH_GATE_SECRET_FILE=/path/to/gate-secret \
 | `OPENROUTER_API_KEY` | read from `.env` (loaded when `notch_api.config` is imported) | Used only for `GET /api/v1/key` (spend). |
 | `NOTCH_DASH_HOSTS` | none | Extra `Host` values to answer, comma-separated. On the VPS: the machine's tailnet name (`<machine>.<tailnet>.ts.net`), which `tailscale serve` passes through. |
 | `NOTCH_DASH_TAILNET` | off | `1` trusts Tailscale's address ranges (`100.64.0.0/10`, `fd7a:115c:a1e0::/48`) in `X-Forwarded-For`, where `tailscale serve` names the tailnet device it was reached from. Only for a machine where nothing but `tailscale serve` can reach the dashboard (DEPLOY.md). |
+| `NOTCH_DASH_METER_DB` | off | The /v2 server's meter database, opened read-only, for the usage page (`/usage`, and `/` when `NOTCH_DASH_HOME=usage`). |
+| `NOTCH_DASH_HOME` | `harness` | What `/` shows: `harness`, this stack's health (also at `/harness`), or `usage`, the fleet's. |
 | `NOTCH_DASH_BIND` | `127.0.0.1` | The interface uvicorn listens on. The VPS's container sets `0.0.0.0`; its port is still published on the host's 127.0.0.1 only. |
 | `NOTCH_DASH_AUTH_PROXY` | off | `1` answers any client an authenticating proxy forwarded, skipping the this-machine check. Only where that proxy is the one way in: on the VPS, Caddy's `basic_auth` at `dash.trynotch.xyz` (DEPLOY.md › 6), set in the untracked `compose.override.yaml`. |
 

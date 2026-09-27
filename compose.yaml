@@ -42,7 +42,8 @@ services:
 
   # The dashboard (DASHBOARD.md): metadata only, read-only, from the same image. It shares the
   # api container's network, so its /healthz probe on 127.0.0.1:4131 reaches the server, and it
-  # reads the `meter` volume without writing to it. On the VPS, Caddy serves it at
+  # reads the `meter` volume: `/` is the fleet's usage (who used Notch, how much, how fast, at
+  # what cost), from the meter database. On the VPS, Caddy serves it at
   # dash.trynotch.xyz behind a password and compose.override.yaml (untracked) sets
   # NOTCH_DASH_AUTH_PROXY=1 so it trusts that gate; anywhere else it answers this machine only.
   dash:
@@ -58,6 +59,8 @@ services:
       NOTCH_DASH_AUTH_PROXY: ${NOTCH_DASH_AUTH_PROXY:-}
       NOTCH_PORT: "4131"
       NOTCH_METRICS: /data/metrics.jsonl       # one line per model call: kind, model, latency, cost
+      NOTCH_DASH_METER_DB: /data/meter.db      # the fleet's usage (notch_dash/usage.py), opened mode=ro
+      NOTCH_DASH_HOME: usage                   # `/` is the usage page; this stack's health is at /harness
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}  # spend only (GET /api/v1/key)
       # The v1 harness's sources don't exist here: off, so the page says so.
       NOTCH_DB: ""
@@ -69,7 +72,10 @@ services:
       NOTCH_DASH_GATE_SECRET_FILE: ""
       NOTCH_DASH_DEVICE: ""
     volumes:
-      - meter:/data:ro
+      # Read-write, though nothing here writes: the meter is WAL-mode SQLite, whose readers need its
+      # -shm file, and a read-only mount cannot create it while the server is idle. The dashboard
+      # opens the database with mode=ro and only reads metrics.jsonl.
+      - meter:/data
     read_only: true
     security_opt:
       - no-new-privileges:true
