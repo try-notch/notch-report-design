@@ -42,6 +42,8 @@ class Settings:
     trusted_forwarders: tuple = ()        # networks, besides loopback, X-Forwarded-For may name
     bind: str = "127.0.0.1"               # the interface uvicorn listens on
     behind_auth_proxy: bool = False       # a proxy that authenticates every request stands in front
+    meter_db: str | None = None           # the /v2 meter, for the fleet's usage (usage.py); off if unset
+    home: str = "harness"                 # what `/` shows: "harness" (this stack) or "usage" (the fleet)
 
     @classmethod
     def from_env(cls, environ=os.environ):
@@ -61,4 +63,6 @@ class Settings:
                                                if h.strip()]),
                    trusted_forwarders=TAILNET if environ.get("NOTCH_DASH_TAILNET") == "1" else (),
                    bind=environ.get("NOTCH_DASH_BIND") or "127.0.0.1",
-                   behind_auth_proxy=environ.get("NOTCH_DASH_AUTH_PROXY") == "1")
+                   behind_auth_proxy=environ.get("NOTCH_DASH_AUTH_PROXY") == "1",
+                   meter_db=opt("NOTCH_DASH_METER_DB"),
+                   home="usage" if environ.get("NOTCH_DASH_HOME") == "usage" else "harness")

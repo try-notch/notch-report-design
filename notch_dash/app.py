@@ -21,12 +21,13 @@ import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 
-from . import logs, probes, record, snapshot
+from . import logs, probes, record, snapshot, usage
 from .live import Poller, Tail, run
 
 STATIC = pathlib.Path(__file__).with_name("static")
 PAGE_FILES = {"index.html": "text/html; charset=utf-8", "app.js": "text/javascript; charset=utf-8",
-              "style.css": "text/css; charset=utf-8"}
+              "style.css": "text/css; charset=utf-8", "usage.html": "text/html; charset=utf-8",
+              "usage.js": "text/javascript; charset=utf-8"}
 HEADERS = {
     "Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff",
     "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
@@ -198,7 +199,21 @@ def create_app(settings, *, http=None, run=subprocess.run, clock=time.time, star
 
     @app.api_route("/", methods=["GET", "HEAD"])
     def page():
+        return _page_file("usage.html" if settings.home == "usage" else "index.html")
+
+    @app.api_route("/usage", methods=["GET", "HEAD"])
+    def usage_page():
+        return _page_file("usage.html")
+
+    @app.api_route("/harness", methods=["GET", "HEAD"])
+    def harness_page():
         return _page_file("index.html")
+
+    @app.api_route("/api/usage", methods=["GET", "HEAD"])
+    def api_usage():
+        if not settings.meter_db:
+            return JSONResponse({"error": "Not set up. Set NOTCH_DASH_METER_DB to the /v2 meter database."})
+        return JSONResponse(usage.read(settings.meter_db, clock()))
 
     @app.api_route("/static/{name}", methods=["GET", "HEAD"])
     def static(name: str):
