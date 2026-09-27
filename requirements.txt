@@ -1,4 +1,7 @@
+# Everything for development: the server, the report demo CLI, the /v1 harness and the tests.
+-r requirements-server.txt
 anthropic>=0.40
 matplotlib>=3.8
 reportlab>=4.0
-python-dotenv>=1.0
+python-multipart>=0.0.9
+pytest>=8.0

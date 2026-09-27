@@ -1,0 +1,39 @@
+# /etc/caddy/Caddyfile on the Notch VPS (installed by deploy/setup.sh; see DEPLOY.md).
+#
+# One public site. Caddy gets and renews its TLS certificate itself once the DNS record for
+# api.trynotch.xyz points at this machine and ports 80 and 443 are open.
+#
+# No access log: there is no `log` directive, and Caddy writes access logs only where one
+# is set. notch_api writes its own scrubbed line per request (privacy.py).
+{
+	# Optional: an address Let's Encrypt may write to about this certificate.
+	# email <an address you read>
+
+	servers {
+		timeouts {
+			# The app gives up on a transcription 150 s in, upload included; a slower body is abandoned.
+			read_header 15s
+			read_body 3m
+		}
+	}
+}
+
+api.trynotch.xyz {
+	# The largest recording is 25 MB (limits.max_audio_bytes); nothing larger reaches notch_api.
+	request_body {
+		max_size 30MB
+	}
+
+	reverse_proxy 127.0.0.1:4131 {
+		transport http {
+			# A report may take 240 s (its deadline) and the app waits 30 s more.
+			response_header_timeout 300s
+		}
+	}
+
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+	}
+}

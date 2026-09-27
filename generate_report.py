@@ -23,15 +23,6 @@ import os
 import sys
 import time
 
-# Load .env if python-dotenv is installed, so ANTHROPIC_API_KEY can live in a file
-# rather than being exported by hand every session. Optional — the env var works fine.
-try:
-    from dotenv import load_dotenv
-
-    load_dotenv()
-except ImportError:
-    pass
-
 import charts
 import db
 import llm
@@ -226,10 +217,17 @@ def report_project(user, project_name):
 
 def report_tag(user, tag):
     step("1/5", "Fetching entries from SQLite…")
+    catalog = db.get_tag_names()
+    if tag not in catalog:
+        fail(f"No tag named \"{tag}\" in the catalog.")
+        print(f"     Tags in the catalog: {', '.join(catalog) or '(none)'}")
+        print()
+        return None
+
     entries = db.get_entries_by_tag(tag)
     if not entries:
         fail(f"No entries tagged \"{tag}\".")
-        print(f"     Tags in use: {', '.join(db.TAGS)}")
+        print(f"     Tags in the catalog: {', '.join(catalog)}")
         print()
         return None
 
@@ -340,11 +338,12 @@ def main():
         fail(str(exc))
         return 1
 
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        fail("ANTHROPIC_API_KEY is not set.")
-        print("     Copy .env.example to .env and add your key, or run:")
-        print("       export ANTHROPIC_API_KEY=sk-ant-...")
-        print()
+    # Reads .env via llm.load_api_key(). Checked up front so a missing key fails
+    # in a second rather than after the fetch-and-count work.
+    try:
+        llm.load_api_key()
+    except llm.MissingAPIKeyError as exc:
+        fail(str(exc))
         return 1
 
     try:

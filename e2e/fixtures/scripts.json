@@ -1,0 +1,50 @@
+{
+  "about": "Spoken notches for e2e/run_e2e.py, in the seed data's voice. days_ago is counted back from the run's UTC day and clamped to this week's Monday, so every notch lands in the current week. time is UTC. span_days is the catch-up span, inclusive, ending on the recorded day. expect is what a real model should pull out: the project named (or null), whether someone praised the work, whether a measured result is stated. Audio is generated from `script` by TTS and cached in audio/<name>.m4a.",
+  "entries": [
+    {
+      "name": "refactor-bundle",
+      "days_ago": 3,
+      "time": "16:40",
+      "mode": "daily",
+      "span_days": null,
+      "script": "Okay, quick one. I went back into the Front-End Refactor today because the date picker was still pulling in the whole old date library, which I kind of knew about and kept not dealing with. Swapped it for the built-in formatting stuff, and that took way longer than it should have, because three different screens were formatting dates by hand. Anyway, I ran the bundle analyzer afterwards and the main bundle went from four hundred and twelve kilobytes down to three hundred and fifty-six. So that's another fifty-odd off. Honestly I thought the refactor was done-done, but I guess this was the last loose thread.",
+      "expect": {"project": "Front-End Refactor", "acknowledged": false, "impact": true}
+    },
+    {
+      "name": "refactor-walkthrough",
+      "days_ago": 2,
+      "time": "18:05",
+      "mode": "daily",
+      "span_days": null,
+      "script": "Did the walkthrough of the front-end refactor for the mobile team this afternoon. I was kind of nervous about it, because their app still uses a bunch of our old components and I figured they'd be annoyed about having to migrate. But it went fine? I showed them the shared modal and how the new design tokens work, and they asked really good questions about theming that I honestly hadn't thought about. Elena messaged me afterwards and said it was the clearest walkthrough she's had all quarter, which, I'll take it. I need to write up the theming answers before I forget them.",
+      "expect": {"project": "Front-End Refactor", "acknowledged": true, "impact": false}
+    },
+    {
+      "name": "billing-cutover",
+      "days_ago": 1,
+      "time": "17:20",
+      "mode": "daily",
+      "span_days": null,
+      "script": "Billing migration day. We moved the first batch of accounts over to the new invoicing service, about twelve hundred of them, and I spent most of the day watching the reconciliation job like a hawk. Two accounts came out a cent off, which turned out to be the old system rounding every line item instead of the total. Fixed that, re-ran the batch, and reconciliation came back clean, zero mismatches across all twelve hundred accounts. It's a weird feeling when the scary part turns out to be kind of boring. Next batch goes out after the weekend.",
+      "expect": {"project": "Billing Migration", "acknowledged": false, "impact": true}
+    },
+    {
+      "name": "planning-day",
+      "days_ago": 1,
+      "time": "20:45",
+      "mode": "daily",
+      "span_days": null,
+      "script": "Kind of a nothing day, honestly. Planning ran most of the afternoon and we still didn't land on whether search or notifications goes first next quarter, so we're doing the whole thing again later this week. I did sneak in an interview in the morning, a backend candidate, and I think I wrote better feedback than usual, because I actually took notes during it instead of trying to remember everything afterwards. Other than that I mostly answered messages. Tired. Hoping tomorrow has some actual building in it.",
+      "expect": {"project": null, "acknowledged": false, "impact": false}
+    },
+    {
+      "name": "on-call-catch-up",
+      "days_ago": 0,
+      "time": "09:15",
+      "mode": "catch_up",
+      "span_days": 3,
+      "script": "Catching up on the last few days, because I didn't record anything. I was on call and it just ate everything. Nothing major broke, but the pager kept going off overnight for the same disk space alert on the logging boxes, and I finally dug into why instead of just clearing it again. Turns out the log rotation config never got copied over when we moved hosts. I wrote it all down in the on-call notes so the next person doesn't have to go through the same thing. I also paired with Priya for a bit on her search indexing question, which was a nice break from staring at dashboards.",
+      "expect": {"project": null, "acknowledged": false, "impact": false}
+    }
+  ]
+}

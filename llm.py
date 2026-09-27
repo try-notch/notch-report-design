@@ -34,6 +34,7 @@ paying frontier-model prices for it every week would be a bad trade.
 import os
 
 import anthropic
+from dotenv import load_dotenv
 
 # Haiku 4.5: the cheap/fast tier. Report generation runs often (weekly digests
 # per user), so the per-run cost matters more than squeezing out the last few
@@ -44,7 +45,40 @@ MAX_TOKENS = 8000
 
 
 class MissingAPIKeyError(Exception):
-    """Raised when ANTHROPIC_API_KEY isn't set — caught in generate_report.py."""
+    """Raised when ANTHROPIC_API_KEY isn't usable — caught by the CLI entry points."""
+
+
+# The literal value shipped in .env.example. Someone who copies the file but
+# forgets to edit it has a key that is "set" but not real, so we catch it here
+# and say so, rather than letting it through to a confusing 401 from the API.
+PLACEHOLDER_KEY = "sk-ant-your-key-here"
+
+
+def load_api_key():
+    """
+    Load .env and return ANTHROPIC_API_KEY. The one place the key is read.
+
+    load_dotenv() does not overwrite variables already in the environment, so an
+    exported key still beats the file — which is what you want when overriding
+    for a single run.
+    """
+    load_dotenv()
+    key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+
+    if key == PLACEHOLDER_KEY:
+        raise MissingAPIKeyError(
+            ".env still has the placeholder key in it.\n"
+            "  Open .env and replace sk-ant-your-key-here with your real key."
+        )
+    if not key:
+        raise MissingAPIKeyError(
+            "ANTHROPIC_API_KEY is not set.\n"
+            "  Copy .env.example to .env and put your key in it:\n"
+            "    cp .env.example .env\n"
+            "  ...or export it for this session:\n"
+            "    export ANTHROPIC_API_KEY=sk-ant-..."
+        )
+    return key
 
 
 # ---------------------------------------------------------------------------
@@ -343,15 +377,7 @@ def generate_report_content(report_type, context, entries):
     response is guaranteed to be a filled-in object — there is no free text to
     parse and no chance of getting prose back where we expected fields.
     """
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise MissingAPIKeyError(
-            "ANTHROPIC_API_KEY is not set.\n"
-            "  Copy .env.example to .env and put your key in it, or run:\n"
-            "    export ANTHROPIC_API_KEY=sk-ant-..."
-        )
-
-    client = anthropic.Anthropic(api_key=api_key)
+    client = anthropic.Anthropic(api_key=load_api_key())
 
     tool = {
         "name": "write_report",

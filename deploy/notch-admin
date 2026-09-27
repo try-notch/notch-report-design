@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# notch-admin — `python -m notch_api.admin` on the VPS, as the service's user, against the
+# service's meter database (so every file SQLite touches stays the service's own).
+#
+#   sudo notch-admin config show
+#   sudo notch-admin config push ./config.json --note "reports off during the incident"
+#   sudo notch-admin account block <uuid> --code abuse
+#
+# A config file is read here, by the operator, and handed over on stdin: the service's
+# user need not be able to read it.
+set -euo pipefail
+cd /opt/notch/app
+run=(sudo -u notch env NOTCH_METER_DB=/var/lib/notch/meter.db /opt/notch/venv/bin/python -m notch_api.admin)
+if [[ ${1:-} == config && ${2:-} == push && -n ${3:-} && ${3} != - ]]; then
+  file=$3
+  shift 3
+  exec "${run[@]}" config push - "$@" < "$file"
+fi
+exec "${run[@]}" "$@"

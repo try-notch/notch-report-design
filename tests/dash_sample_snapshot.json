@@ -1,0 +1,272 @@
+{
+  "v": 1,
+  "generated_at": 1790368700.0,
+  "took_ms": 6.2,
+  "overall": {
+    "status": "warn",
+    "word": "Worth a look",
+    "reason": "1 notch couldn’t be written up in the last hour.",
+    "problems": [
+      {"check": "worker", "status": "warn", "word": "Failed", "reason": "1 notch couldn’t be written up in the last hour."}
+    ]
+  },
+  "checks": {
+    "phone": {
+      "status": "ok",
+      "word": "Fine",
+      "reason": "Seen 10 s ago through the gate.",
+      "last_seen_at": 1790368689.8,
+      "last_route": "POST /v1/entries",
+      "requests_1h": 9,
+      "device": {
+        "name": "Example iPhone",
+        "model": "iPhone 17 Pro",
+        "os": "27.0",
+        "connection": "disconnected",
+        "pairing": "paired",
+        "transport": "localNetwork",
+        "last_connected_at": 1790368380.0,
+        "read_at": 1790368661.0
+      }
+    },
+    "tunnel": {
+      "status": "ok",
+      "word": "Fine",
+      "reason": "1 connection via ewr14 · answered end to end in 212 ms.",
+      "ready_connections": 1,
+      "edge": "ewr14",
+      "rtt_ms": 18.0,
+      "version": "2026.9.3",
+      "requests_total": 53,
+      "request_errors": 0,
+      "host": "sample-quick-tunnel.trycloudflare.com",
+      "phone_host": "sample-quick-tunnel.trycloudflare.com",
+      "probe": {
+        "at": 1790368690.2,
+        "ok": true,
+        "http_status": 200,
+        "latency_ms": 212.4,
+        "error": null
+      },
+      "read_at": 1790368699.1
+    },
+    "gate": {
+      "status": "ok",
+      "word": "Fine",
+      "reason": "/healthz and /docs stay closed without the secret.",
+      "integrity": {
+        "at": 1790368655.0,
+        "healthz": 404,
+        "docs": 404,
+        "open": false,
+        "error": null
+      },
+      "blocked_1h": 1,
+      "blocked_24h": 2,
+      "last_blocked_at": 1790368684.99,
+      "passed_without_secret_10m": 0
+    },
+    "server": {
+      "status": "ok",
+      "word": "Fine",
+      "reason": "Answering in 3.8 ms.",
+      "port": 4131,
+      "at": 1790368699.4,
+      "http_status": 200,
+      "latency_ms": 3.8,
+      "error": null,
+      "started_at": 1790365371.0
+    },
+    "worker": {
+      "status": "warn",
+      "word": "Failed",
+      "reason": "1 notch couldn’t be written up in the last hour.",
+      "busy": true,
+      "captures": {"queued": 0, "transcribing": 0, "analyzing": 1},
+      "reports": {"queued": 0, "counting": 0, "writing": 0},
+      "oldest_pending_ms": 10000.0,
+      "stuck": 0,
+      "done_24h": 2,
+      "failed_24h": 1,
+      "failed_1h": 1
+    },
+    "openrouter": {
+      "status": "ok",
+      "word": "Fine",
+      "reason": "$0.04 today · $0.24 this month · $49.76 left of $50.",
+      "limit_usd": 50.0,
+      "remaining_usd": 49.76,
+      "today_usd": 0.0444,
+      "week_usd": 0.2435,
+      "month_usd": 0.2435,
+      "total_usd": 0.2435,
+      "free_tier": false,
+      "read_at": 1790368661.3
+    }
+  },
+  "pipeline": {
+    "counts_24h": {"notches": 3, "complete": 1, "failed": 1, "in_flight": 1},
+    "rows": [
+      {
+        "entry_id": "C7E4A1B9-2F3D-4B8E-9A61-3D5E7F9A1B2C",
+        "job_id": "3b9d2c1e-5f7a-4e8b-9c0d-1a2b3c4d5e6f",
+        "state": "analyzing",
+        "recorded_at": 1790368682.0,
+        "submitted_at": 1790368690.0,
+        "finished_at": null,
+        "elapsed_ms": 10000.0,
+        "attempts": 1,
+        "failure_code": null,
+        "note": null,
+        "recording_ms": 31240.0,
+        "words": 58,
+        "audio_on_disk": true,
+        "phase_source": "metrics",
+        "phases": [
+          {"name": "wait", "state": "done", "start_ms": 0.0, "ms": 0.0, "calls": null, "failed_calls": null},
+          {"name": "stt", "state": "done", "start_ms": 410.0, "ms": 1830.0, "calls": 1, "failed_calls": 0},
+          {"name": "classify", "state": "done", "start_ms": 2350.0, "ms": 190.0, "calls": 1, "failed_calls": 0},
+          {"name": "chat", "state": "running", "start_ms": 2350.0, "ms": 7650.0, "calls": 0, "failed_calls": 0}
+        ]
+      },
+      {
+        "entry_id": "5B2F0285-4E38-4DA8-926A-28B4184D7D79",
+        "job_id": "f8af4772-addd-4e68-bffe-f28d946e3dee",
+        "state": "complete",
+        "recorded_at": 1790368427.0,
+        "submitted_at": 1790368440.0,
+        "finished_at": 1790368442.0,
+        "elapsed_ms": 2000.0,
+        "attempts": 1,
+        "failure_code": null,
+        "note": null,
+        "recording_ms": 11569.6,
+        "words": 27,
+        "audio_on_disk": true,
+        "phase_source": "metrics",
+        "phases": [
+          {"name": "wait", "state": "done", "start_ms": 0.0, "ms": 0.0, "calls": null, "failed_calls": null},
+          {"name": "stt", "state": "done", "start_ms": 650.0, "ms": 180.0, "calls": 1, "failed_calls": 0},
+          {"name": "classify", "state": "done", "start_ms": 840.0, "ms": 175.0, "calls": 1, "failed_calls": 0},
+          {"name": "chat", "state": "done", "start_ms": 840.0, "ms": 706.0, "calls": 1, "failed_calls": 0}
+        ]
+      },
+      {
+        "entry_id": "9C1D7E3A-6B2F-4A8C-B5D4-0E9F8A7B6C5D",
+        "job_id": "a1c3e5f7-0b2d-4f6a-8c9e-7d5b3a1f2e4c",
+        "state": "failed",
+        "recorded_at": 1790366552.0,
+        "submitted_at": 1790366560.0,
+        "finished_at": 1790366578.0,
+        "elapsed_ms": 18000.0,
+        "attempts": 1,
+        "failure_code": "model_unavailable",
+        "note": "Couldn’t write this one. stt answered 502 after 5 tries. The audio is still here.",
+        "recording_ms": 48210.0,
+        "words": null,
+        "audio_on_disk": true,
+        "phase_source": "metrics",
+        "phases": [
+          {"name": "wait", "state": "done", "start_ms": 0.0, "ms": 0.0, "calls": null, "failed_calls": null},
+          {"name": "stt", "state": "failed", "start_ms": 320.0, "ms": 17030.0, "calls": 5, "failed_calls": 5}
+        ]
+      }
+    ]
+  },
+  "traffic": {
+    "requests_1h": 11,
+    "errors_1h": 0,
+    "by_source_1h": {"gate": 10, "local": 1},
+    "hour": {
+      "start_at": 1790365140.0,
+      "step_s": 60,
+      "by_class": {
+        "2xx": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 8],
+        "3xx": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "4xx": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "5xx": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+      }
+    },
+    "routes": [
+      {"route": "POST /v1/entries", "count": 3, "errors": 0, "p50_ms": 41.0, "p95_ms": 44.2, "last_at": 1790368689.8},
+      {"route": "GET /healthz", "count": 2, "errors": 0, "p50_ms": 1.4, "p95_ms": 1.9, "last_at": 1790368685.11},
+      {"route": "GET /v1/entries", "count": 1, "errors": 0, "p50_ms": 8.9, "p95_ms": 8.9, "last_at": 1790368685.4},
+      {"route": "GET /v1/entries/{id}", "count": 1, "errors": 0, "p50_ms": 7.1, "p95_ms": 7.1, "last_at": 1790368443.0},
+      {"route": "GET /v1/me", "count": 1, "errors": 0, "p50_ms": 5.8, "p95_ms": 5.8, "last_at": 1790368685.2},
+      {"route": "GET /v1/projects", "count": 1, "errors": 0, "p50_ms": 6.4, "p95_ms": 6.4, "last_at": 1790368685.2},
+      {"route": "GET /v1/reports", "count": 1, "errors": 0, "p50_ms": 8.0, "p95_ms": 8.0, "last_at": 1790368685.3},
+      {"route": "GET /v1/stats", "count": 1, "errors": 0, "p50_ms": 8.4, "p95_ms": 8.4, "last_at": 1790368685.3}
+    ]
+  },
+  "models": {
+    "source": "metrics",
+    "note": null,
+    "kinds": [
+      {"kind": "stt", "model": "openai/whisper-large-v3", "calls": 7, "failed": 5, "p50_ms": 405.0, "p95_ms": 1830.0, "prompt_tokens": null, "completion_tokens": null, "total_tokens": null, "cost_usd": 0.0003, "last_at": 1790368690.41},
+      {"kind": "classify", "model": "typesafe/jev-1.13", "calls": 2, "failed": 0, "p50_ms": 175.0, "p95_ms": 190.0, "prompt_tokens": null, "completion_tokens": null, "total_tokens": null, "cost_usd": 0.00002, "last_at": 1790368692.35},
+      {"kind": "chat", "model": "deepseek/deepseek-v4-pro-0813", "calls": 2, "failed": 0, "p50_ms": 706.0, "p95_ms": 1416.0, "prompt_tokens": 5430, "completion_tokens": 616, "total_tokens": 6046, "cost_usd": 0.0103, "last_at": 1790368663.21}
+    ],
+    "recent": [
+      {"at": 1790368692.35, "kind": "classify", "model": "typesafe/jev-1.13", "tool": null, "status": 200, "ok": true, "latency_ms": 190.0, "attempt": 1, "job": "capture", "entry_id": "C7E4A1B9-2F3D-4B8E-9A61-3D5E7F9A1B2C", "total_tokens": null, "cost_usd": 0.00001},
+      {"at": 1790368690.41, "kind": "stt", "model": "openai/whisper-large-v3", "tool": null, "status": 200, "ok": true, "latency_ms": 1830.0, "attempt": 1, "job": "capture", "entry_id": "C7E4A1B9-2F3D-4B8E-9A61-3D5E7F9A1B2C", "total_tokens": null, "cost_usd": 0.0002},
+      {"at": 1790368663.21, "kind": "chat", "model": "deepseek/deepseek-v4-pro-0813", "tool": "write_report", "status": 200, "ok": true, "latency_ms": 1416.0, "attempt": 1, "job": "report", "entry_id": null, "total_tokens": 3522, "cost_usd": 0.0062},
+      {"at": 1790368440.84, "kind": "chat", "model": "deepseek/deepseek-v4-pro-0813", "tool": "label_entry", "status": 200, "ok": true, "latency_ms": 706.0, "attempt": 1, "job": "capture", "entry_id": "5B2F0285-4E38-4DA8-926A-28B4184D7D79", "total_tokens": 2524, "cost_usd": 0.0041},
+      {"at": 1790368440.84, "kind": "classify", "model": "typesafe/jev-1.13", "tool": null, "status": 200, "ok": true, "latency_ms": 175.0, "attempt": 1, "job": "capture", "entry_id": "5B2F0285-4E38-4DA8-926A-28B4184D7D79", "total_tokens": null, "cost_usd": 0.00001},
+      {"at": 1790368440.65, "kind": "stt", "model": "openai/whisper-large-v3", "tool": null, "status": 200, "ok": true, "latency_ms": 180.0, "attempt": 1, "job": "capture", "entry_id": "5B2F0285-4E38-4DA8-926A-28B4184D7D79", "total_tokens": null, "cost_usd": 0.0001},
+      {"at": 1790366576.935, "kind": "stt", "model": "openai/whisper-large-v3", "tool": null, "status": 502, "ok": false, "latency_ms": 415.0, "attempt": 5, "job": "capture", "entry_id": "9C1D7E3A-6B2F-4A8C-B5D4-0E9F8A7B6C5D", "total_tokens": null, "cost_usd": null},
+      {"at": 1790366568.525, "kind": "stt", "model": "openai/whisper-large-v3", "tool": null, "status": 502, "ok": false, "latency_ms": 410.0, "attempt": 4, "job": "capture", "entry_id": "9C1D7E3A-6B2F-4A8C-B5D4-0E9F8A7B6C5D", "total_tokens": null, "cost_usd": null},
+      {"at": 1790366564.12, "kind": "stt", "model": "openai/whisper-large-v3", "tool": null, "status": 502, "ok": false, "latency_ms": 405.0, "attempt": 3, "job": "capture", "entry_id": "9C1D7E3A-6B2F-4A8C-B5D4-0E9F8A7B6C5D", "total_tokens": null, "cost_usd": null},
+      {"at": 1790366561.718, "kind": "stt", "model": "openai/whisper-large-v3", "tool": null, "status": 502, "ok": false, "latency_ms": 402.0, "attempt": 2, "job": "capture", "entry_id": "9C1D7E3A-6B2F-4A8C-B5D4-0E9F8A7B6C5D", "total_tokens": null, "cost_usd": null},
+      {"at": 1790366560.32, "kind": "stt", "model": "openai/whisper-large-v3", "tool": null, "status": 502, "ok": false, "latency_ms": 398.0, "attempt": 1, "job": "capture", "entry_id": "9C1D7E3A-6B2F-4A8C-B5D4-0E9F8A7B6C5D", "total_tokens": null, "cost_usd": null}
+    ]
+  },
+  "blocked": {
+    "count_1h": 1,
+    "count_24h": 2,
+    "top_paths": [
+      {"path": "/.env", "count": 1},
+      {"path": "/wp-login.php", "count": 1}
+    ],
+    "recent": [
+      {"at": 1790368684.99, "method": "GET", "path": "/wp-login.php", "status": 404, "country": "US", "user_agent": "curl/8.7.1", "client_ip": "203.0.113.7"},
+      {"at": 1790341200.0, "method": "GET", "path": "/.env", "status": 404, "country": "DE", "user_agent": "Mozilla/5.0 zgrab/0.x", "client_ip": "198.51.100.23"}
+    ]
+  },
+  "record": {
+    "entries": {
+      "total": 3,
+      "last_7d": 3,
+      "by_state": {"pending": 0, "transcribing": 0, "analyzing": 1, "complete": 1, "failed": 1}
+    },
+    "projects": 0,
+    "reports": {"total": 1, "last_generated_at": 1790368663.0},
+    "report_jobs": {"queued": 0, "counting": 0, "writing": 0, "complete": 1, "failed": 0},
+    "audio": {
+      "objects": 3,
+      "db_bytes": 1163414,
+      "disk_bytes": 1163414,
+      "disk_files": 3,
+      "past_retention": 0
+    }
+  },
+  "errors": {
+    "server": [
+      {"level": "ERROR", "where": "uvicorn.error", "message": "Exception in ASGI application", "exception": "sqlite3.OperationalError: database is locked", "count": 1, "first_at": 1790366101.4, "last_at": 1790366101.4, "sample": "Traceback (most recent call last):\n  File \"notch_api/app.py\", line 152, in db\n    yield conn\nsqlite3.OperationalError: database is locked"}
+    ],
+    "tunnel": [
+      {"level": "WRN", "where": null, "message": "Failed to refresh DNS local resolver", "exception": null, "count": 2, "first_at": 1790368300.0, "last_at": 1790368360.0, "sample": "2026-09-25T20:32:40Z WRN Failed to refresh DNS local resolver error=\"lookup region1.v2.argotunnel.com: no such host\""}
+    ]
+  },
+  "sources": {
+    "db": {"state": "ok", "where": "phone.db", "read_at": 1790368700.0, "reason": null},
+    "audio_dir": {"state": "ok", "where": "phone-audio", "read_at": 1790368661.0, "reason": null},
+    "metrics": {"state": "ok", "where": "phone-metrics.jsonl", "read_at": 1790368699.0, "reason": null},
+    "caddy_log": {"state": "ok", "where": "caddy-notch.access.log", "read_at": 1790368699.0, "reason": null},
+    "server_log": {"state": "ok", "where": "phone-server.log", "read_at": 1790368699.0, "reason": null},
+    "tunnel_log": {"state": "ok", "where": "tunnel.log", "read_at": 1790368696.0, "reason": null},
+    "tunnel_metrics": {"state": "ok", "where": "127.0.0.1:20241", "read_at": 1790368699.1, "reason": null},
+    "gate_secret": {"state": "ok", "where": "gate-secret", "read_at": 1790368690.0, "reason": null},
+    "openrouter": {"state": "ok", "where": "openrouter.ai/api/v1/key", "read_at": 1790368661.3, "reason": null},
+    "device": {"state": "ok", "where": "xcrun devicectl", "read_at": 1790368661.0, "reason": null}
+  }
+}

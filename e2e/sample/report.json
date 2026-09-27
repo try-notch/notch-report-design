@@ -1,0 +1,114 @@
+{
+  "id": "0CD8193F-19E7-4931-A3AD-3BDC6062B353",
+  "type": "week",
+  "range_start": "2026-09-21",
+  "range_end": "2026-09-27",
+  "range_label": "Sep 21 – Sep 27",
+  "headline": "The last loose thread",
+  "eyebrow": "Weekly report · Sep 21 – Sep 27",
+  "lede": "A week of finishing things: the front-end refactor's last loose thread, the first billing migration batch, and a lot of quiet work that kept other people moving.",
+  "body": "You spent the week closing loose threads and making the invisible visible. The front-end refactor finally got its last piece, the billing migration crossed its first real threshold, and a lot of the rest was the kind of work that only shows up if someone goes looking for it.\n\nWhat's working is your follow-through on things you'd been quietly putting off. The date picker was still dragging the old date library along, and you went back and swapped it for built-in formatting, touching three screens that were formatting dates by hand. The main bundle dropped from 412 kilobytes to 356, and the refactor is actually done now. You're also good at explaining your work to people who have to live with it: the mobile walkthrough landed well enough that Elina called it the clearest she's had all quarter.\n\nThe next version of that explaining is writing it down before it evaporates. You already do this when it counts — you captured onboarding knowledge that had only been in your head, and you wrote the on-call fix into the notes so the next person doesn't have to dig through the same pager loop. The mobile team's theming questions are the same shape: you said you need to write up those answers before you forget them, and that's the one to actually do.\n\nA lot of this week won't show up on a ticket. The log rotation config that never got copied over when you moved hosts — you finally dug into why instead of clearing the alert again, and wrote it down. That's the kind of fix nobody notices unless it breaks, and you made sure it won't. Going forward, the concrete next move is to get the theming write-up out while the walkthrough is still fresh, and then the next billing batch goes out after the weekend.",
+  "generated_at": "2026-09-24T23:59:16Z",
+  "counts": {
+    "notches": 7,
+    "projects": 2,
+    "milestones": 0
+  },
+  "momentum": [
+    {
+      "date": "2026-09-21",
+      "count": 2
+    },
+    {
+      "date": "2026-09-22",
+      "count": 1
+    },
+    {
+      "date": "2026-09-23",
+      "count": 2
+    },
+    {
+      "date": "2026-09-24",
+      "count": 2
+    },
+    {
+      "date": "2026-09-25",
+      "count": 0
+    },
+    {
+      "date": "2026-09-26",
+      "count": 0
+    },
+    {
+      "date": "2026-09-27",
+      "count": 0
+    }
+  ],
+  "momentum_granularity": "day",
+  "project_breakdown": [
+    {
+      "name": "Front-End Refactor",
+      "notch_count": 2,
+      "share": 28
+    },
+    {
+      "name": "Billing Migration",
+      "notch_count": 1,
+      "share": 14
+    }
+  ],
+  "highlights": [
+    {
+      "ordinal": 0,
+      "title": "Bundle down to 356",
+      "detail": "swapped the date picker off the old library and the main bundle dropped from 412 kilobytes to 356",
+      "kind": "shipped",
+      "source_entry_ids": [
+        "33F88FA1-DABE-412C-80A1-56D27AED3927"
+      ]
+    },
+    {
+      "ordinal": 1,
+      "title": "First billing batch clean",
+      "detail": "moved the first 1,200 accounts and reconciliation came back clean with zero mismatches",
+      "kind": "shipped",
+      "source_entry_ids": [
+        "1EDF1535-0D46-44CB-880E-20417FF64C0A"
+      ]
+    },
+    {
+      "ordinal": 2,
+      "title": "Clearest walkthrough all quarter",
+      "detail": "Elina said it was the clearest walkthrough she's had all quarter",
+      "kind": "collaboration",
+      "source_entry_ids": [
+        "4843857A-8680-499C-87BB-A2949501276A"
+      ]
+    },
+    {
+      "ordinal": 3,
+      "title": "On-call fix documented",
+      "detail": "dug into the recurring disk alert and wrote the fix into the on-call notes",
+      "kind": "note",
+      "source_entry_ids": [
+        "89C726EC-4886-4105-8C53-F610D67CF111"
+      ]
+    }
+  ],
+  "source_entry_ids": [
+    "33F88FA1-DABE-412C-80A1-56D27AED3927",
+    "seed-03",
+    "4843857A-8680-499C-87BB-A2949501276A",
+    "1EDF1535-0D46-44CB-880E-20417FF64C0A",
+    "2625F13B-0D3C-43E4-AE7C-83521AC57E34",
+    "89C726EC-4886-4105-8C53-F610D67CF111",
+    "seed-04"
+  ],
+  "themes": [
+    "refactor",
+    "documentation",
+    "oncall",
+    "payments-integration",
+    "pairing"
+  ]
+}

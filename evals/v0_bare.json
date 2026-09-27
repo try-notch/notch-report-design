@@ -1,0 +1,618 @@
+{
+  "variant": "v0_bare",
+  "model": "claude-haiku-4-5-20251001",
+  "n": 52,
+  "tokens_in": 82554,
+  "tokens_out": 7280,
+  "predictions": [
+    {
+      "id": 50,
+      "date": "May 10, 2026",
+      "raw_text": "First real week on the payments integration. A lot of reading, not much writing. Trying to be patient about it.",
+      "actual": [
+        "growth"
+      ],
+      "predicted": [
+        "growth"
+      ]
+    },
+    {
+      "id": 51,
+      "date": "May 12, 2026",
+      "raw_text": "Found an edge case in the refund flow where a partial refund could exceed the original charge. Reported it, turned out nobody had hit it yet.",
+      "actual": [
+        "collaboration",
+        "wins"
+      ],
+      "predicted": [
+        "wins"
+      ]
+    },
+    {
+      "id": 52,
+      "date": "May 15, 2026",
+      "raw_text": "Long day pairing with Sam on the payments state machine. Neither of us fully understood it going in, both of us did coming out.",
+      "actual": [
+        "collaboration",
+        "growth"
+      ],
+      "predicted": [
+        "collaboration",
+        "growth"
+      ]
+    },
+    {
+      "id": 46,
+      "date": "May 16, 2026",
+      "raw_text": "Design review with Elena's team on the new dashboard. I pushed back on a layout that would've needed three new one-off components. We found a simpler version.",
+      "actual": [
+        "collaboration",
+        "leadership"
+      ],
+      "predicted": [
+        "collaboration"
+      ]
+    },
+    {
+      "id": 47,
+      "date": "May 18, 2026",
+      "raw_text": "Wrote the integration tests for the webhook system that I keep saying I'll write. Took a day. Nobody will notice unless they break.",
+      "actual": [
+        "growth",
+        "wins"
+      ],
+      "predicted": [
+        "wins"
+      ]
+    },
+    {
+      "id": 48,
+      "date": "May 19, 2026",
+      "raw_text": "Marcus was stuck on a deploy that kept rolling back. Sat with him and we found it was an env var missing in staging only. Two hours of his day, ten minutes together.",
+      "actual": [
+        "collaboration"
+      ],
+      "predicted": [
+        "collaboration"
+      ]
+    },
+    {
+      "id": 49,
+      "date": "May 22, 2026",
+      "raw_text": "Went through the on-call runbook and updated the four steps that were out of date. Boring. Would've mattered a lot at 3am.",
+      "actual": [
+        "leadership"
+      ],
+      "predicted": [
+        "wins"
+      ]
+    },
+    {
+      "id": 42,
+      "date": "May 23, 2026",
+      "raw_text": "Interviewed a backend candidate. Spent 30 minutes afterward writing careful feedback because I've been on the other side of a two-line rejection.",
+      "actual": [
+        "leadership"
+      ],
+      "predicted": [
+        "leadership"
+      ]
+    },
+    {
+      "id": 43,
+      "date": "May 25, 2026",
+      "raw_text": "Spent an hour with Priya walking through how our auth flow actually works. She was blocked on a ticket and the docs were wrong.",
+      "actual": [
+        "collaboration"
+      ],
+      "predicted": [
+        "collaboration"
+      ]
+    },
+    {
+      "id": 44,
+      "date": "May 26, 2026",
+      "raw_text": "Shipped the rate limiter for the public API. Simple sliding window, nothing fancy. It works.",
+      "actual": [
+        "wins"
+      ],
+      "predicted": [
+        "wins"
+      ]
+    },
+    {
+      "id": 45,
+      "date": "May 29, 2026",
+      "raw_text": "Frustrating day. Chased a bug for six hours that turned out to be a stale local cache. Learned to check the boring things first, again.",
+      "actual": [
+        "challenges",
+        "growth"
+      ],
+      "predicted": [
+        "challenges",
+        "growth"
+      ]
+    },
+    {
+      "id": 38,
+      "date": "May 30, 2026",
+      "raw_text": "Started digging into the search latency thing. Profiled it and the answer was boring: an N+1 query. Sometimes it's not exciting.",
+      "actual": [
+        "challenges"
+      ],
+      "predicted": [
+        "wins"
+      ]
+    },
+    {
+      "id": 39,
+      "date": "Jun 1, 2026",
+      "raw_text": "Fixed the N+1 and added a test that would've caught it. The test was the harder part.",
+      "actual": [
+        "growth",
+        "wins"
+      ],
+      "predicted": [
+        "wins"
+      ]
+    },
+    {
+      "id": 40,
+      "date": "Jun 2, 2026",
+      "raw_text": "Caught a data migration in Tom's PR that would've run against prod without a dry-run step. He'd tested it locally on 200 rows. We have four million.",
+      "actual": [
+        "collaboration",
+        "wins"
+      ],
+      "predicted": [
+        "wins"
+      ]
+    },
+    {
+      "id": 41,
+      "date": "Jun 5, 2026",
+      "raw_text": "Wrote docs for the search service. Nobody asked. But I'd just spent two weeks in there and it seemed dumb to let all that fall out of my head.",
+      "actual": [
+        "growth",
+        "leadership"
+      ],
+      "predicted": [
+        "wins"
+      ]
+    },
+    {
+      "id": 34,
+      "date": "Jun 6, 2026",
+      "raw_text": "Wrapped up the search latency work. p95 down from 1.9 seconds to 640 milliseconds. Took longer than planned but the number is the number.",
+      "actual": [
+        "wins"
+      ],
+      "predicted": [
+        "wins"
+      ]
+    },
+    {
+      "id": 35,
+      "date": "Jun 7, 2026",
+      "raw_text": "Pairing with Nina on her first real feature. Mostly just sat there while she drove and answered questions. Hard to not grab the keyboard.",
+      "actual": [
+        "collaboration",
+        "leadership"
+      ],
+      "predicted": [
+        "collaboration",
+        "growth"
+      ]
+    },
+    {
+      "id": 36,
+      "date": "Jun 9, 2026",
+      "raw_text": "Sat in on the mobile team's planning to flag that our API change would break their client. Saved us both a rollback, probably.",
+      "actual": [
+        "collaboration"
+      ],
+      "predicted": [
+        "collaboration"
+      ]
+    },
+    {
+      "id": 37,
+      "date": "Jun 12, 2026",
+      "raw_text": "Kicking off the front-end refactor today. Spent the morning just reading the component tree and writing down everything that's duplicated. It's worse than I thought \u2014 four different button implementations.",
+      "actual": [
+        "challenges"
+      ],
+      "predicted": [
+        "growth"
+      ]
+    },
+    {
+      "id": 30,
+      "date": "Jun 14, 2026",
+      "raw_text": "Prod incident \u2014 image uploads failing for about 40 minutes. Not our code, a dependency, but I was the one who noticed and paged the right people.",
+      "actual": [
+        "challenges",
+        "wins"
+      ],
+      "predicted": [
+        "wins"
+      ]
+    },
+    {
+      "id": 31,
+      "date": "Jun 15, 2026",
+      "raw_text": "Wrote the RFC for how we're going to do this \u2014 shared primitives first, then migrate feature by feature. Sent it to the team for comments instead of just starting, which past me would not have done.",
+      "actual": [
+        "growth",
+        "leadership"
+      ],
+      "predicted": [
+        "collaboration",
+        "growth"
+      ]
+    },
+    {
+      "id": 32,
+      "date": "Jun 16, 2026",
+      "raw_text": "Spent the afternoon reading the React 19 migration docs. We're not doing it yet but I want to actually understand what's changing before someone asks.",
+      "actual": [
+        "growth"
+      ],
+      "predicted": [
+        "growth"
+      ]
+    },
+    {
+      "id": 33,
+      "date": "Jun 19, 2026",
+      "raw_text": "Built the base Button and Input primitives. Straightforward day. Nice to have a day where the plan just works.",
+      "actual": [
+        "wins"
+      ],
+      "predicted": [
+        "wins"
+      ]
+    },
+    {
+      "id": 26,
+      "date": "Jun 21, 2026",
+      "raw_text": "Unblocked Marcus on a webpack config thing that had eaten his whole morning. Took me fifteen minutes because I'd hit the exact same error last year.",
+      "actual": [
+        "collaboration"
+      ],
+      "predicted": [
+        "collaboration"
+      ]
+    },
+    {
+      "id": 27,
+      "date": "Jun 22, 2026",
+      "raw_text": "Sam and I went back and forth on whether the design tokens should live in the component package or a separate one. Ended up separate. He was right, I was being lazy about it.",
+      "actual": [
+        "collaboration",
+        "growth"
+      ],
+      "predicted": [
+        "collaboration"
+      ]
+    },
+    {
+      "id": 28,
+      "date": "Jun 23, 2026",
+      "raw_text": "Migrated the settings page to the new primitives. Estimated half a day, took a day and a half \u2014 the form validation was tangled into the old components in ways I didn't see coming.",
+      "actual": [
+        "challenges"
+      ],
+      "predicted": [
+        "challenges"
+      ]
+    },
+    {
+      "id": 29,
+      "date": "Jun 26, 2026",
+      "raw_text": "Paired with Nina for most of the afternoon on the table component. She's newer to the codebase and I tried to just ask questions instead of taking the keyboard. Slower but she got it.",
+      "actual": [
+        "collaboration",
+        "leadership"
+      ],
+      "predicted": [
+        "collaboration",
+        "growth"
+      ]
+    },
+    {
+      "id": 23,
+      "date": "Jun 29, 2026",
+      "raw_text": "Caught a bug in Tom's dropdown migration during review \u2014 the keyboard nav was silently broken for anyone using arrow keys. Not something QA would've caught. Glad I actually tabbed through it.",
+      "actual": [
+        "collaboration",
+        "wins"
+      ],
+      "predicted": [
+        "wins"
+      ]
+    },
+    {
+      "id": 24,
+      "date": "Jun 30, 2026",
+      "raw_text": "Long meeting about Q3 planning. Mostly listened. Said one thing about scoping the refactor properly and it ended up in the doc, which surprised me.",
+      "actual": [
+        "growth"
+      ],
+      "predicted": [
+        "collaboration"
+      ]
+    },
+    {
+      "id": 25,
+      "date": "Jul 3, 2026",
+      "raw_text": "Rough one. Merged main and everything exploded \u2014 three weeks of other people's changes against components that no longer exist. Spent the whole day just untangling conflicts.",
+      "actual": [
+        "challenges"
+      ],
+      "predicted": [
+        "challenges"
+      ]
+    },
+    {
+      "id": 20,
+      "date": "Jul 5, 2026",
+      "raw_text": "Set up a codemod so the rest of the team doesn't have to hand-migrate their imports. Took a day to write, probably saves everyone else a day each.",
+      "actual": [
+        "leadership",
+        "wins"
+      ],
+      "predicted": [
+        "wins"
+      ]
+    },
+    {
+      "id": 21,
+      "date": "Jul 7, 2026",
+      "raw_text": "Reviewed Priya's billing page PR and spotted that the currency formatting would break for locales that use commas as decimal separators. Small thing, but it would've been an embarrassing bug.",
+      "actual": [
+        "collaboration",
+        "wins"
+      ],
+      "predicted": [
+        "wins"
+      ]
+    },
+    {
+      "id": 22,
+      "date": "Jul 10, 2026",
+      "raw_text": "Demoed the new component library at the team meeting. Got some pushback on the naming which stung a bit, but they were fair points and I changed two of them.",
+      "actual": [
+        "collaboration",
+        "growth"
+      ],
+      "predicted": [
+        "collaboration",
+        "wins"
+      ]
+    },
+    {
+      "id": 16,
+      "date": "Jul 12, 2026",
+      "raw_text": "On-call. Nothing caught fire, but I noticed our alert for queue depth has been misconfigured for months \u2014 it would never have fired. Fixed the threshold.",
+      "actual": [
+        "challenges",
+        "wins"
+      ],
+      "predicted": [
+        "wins"
+      ]
+    },
+    {
+      "id": 17,
+      "date": "Jul 13, 2026",
+      "raw_text": "Bundle size finally came in under target \u2014 31% smaller than before we started. Sat and looked at the graph for longer than I'd like to admit.",
+      "actual": [
+        "wins"
+      ],
+      "predicted": [
+        "wins"
+      ]
+    },
+    {
+      "id": 18,
+      "date": "Jul 14, 2026",
+      "raw_text": "Ravi asked for help reading our event schema again. Instead of just answering, I wrote it up in the shared wiki so the next person doesn't have to ask.",
+      "actual": [
+        "collaboration",
+        "leadership"
+      ],
+      "predicted": [
+        "collaboration",
+        "wins"
+      ]
+    },
+    {
+      "id": 19,
+      "date": "Jul 17, 2026",
+      "raw_text": "Worked with Aisha from platform to get the new package into the build pipeline properly. Cross-team stuff always takes three times as long as you think, but she was great about it.",
+      "actual": [
+        "collaboration"
+      ],
+      "predicted": [
+        "collaboration"
+      ]
+    },
+    {
+      "id": 11,
+      "date": "Jul 18, 2026",
+      "raw_text": "Last big chunk of the refactor \u2014 swapped the old modal system over. Thought it'd be a one-day job, took three, because half our modals were reaching into internal state I didn't know about.",
+      "actual": [
+        "challenges",
+        "wins"
+      ],
+      "predicted": [
+        "wins"
+      ]
+    },
+    {
+      "id": 12,
+      "date": "Jul 19, 2026",
+      "raw_text": "Cleaned up the last of the dead CSS. Deleted about 2,000 lines. Nothing feels better than a big red diff.",
+      "actual": [
+        "wins"
+      ],
+      "predicted": [
+        "wins"
+      ]
+    },
+    {
+      "id": 13,
+      "date": "Jul 20, 2026",
+      "raw_text": "Helped Ravi from the data team figure out why our events weren't showing up in their pipeline. Turned out to be a schema field we renamed months ago and never told them about. My bad, honestly.",
+      "actual": [
+        "challenges",
+        "collaboration"
+      ],
+      "predicted": [
+        "collaboration"
+      ]
+    },
+    {
+      "id": 14,
+      "date": "Jul 21, 2026",
+      "raw_text": "Refactor's done. Wrote up the migration notes and did a walkthrough for the team so nobody has to reverse-engineer why things moved. Weirdly emotional about it.",
+      "actual": [
+        "leadership",
+        "wins"
+      ],
+      "predicted": [
+        "wins"
+      ]
+    },
+    {
+      "id": 15,
+      "date": "Jul 24, 2026",
+      "raw_text": "Back on regular work after the refactor. Knocked out three small bug tickets that had been sitting in the backlog since April. Felt good to just close things.",
+      "actual": [
+        "wins"
+      ],
+      "predicted": [
+        "wins"
+      ]
+    },
+    {
+      "id": 6,
+      "date": "Jul 25, 2026",
+      "raw_text": "Head down all day on the CSV export rewrite. Streaming it now instead of buffering the whole thing in memory. Didn't talk to anyone which was honestly kind of nice.",
+      "actual": [
+        "wins"
+      ],
+      "predicted": [
+        "wins"
+      ]
+    },
+    {
+      "id": 7,
+      "date": "Jul 26, 2026",
+      "raw_text": "Export thing is fighting me. The streaming version is correct but it's slower than the old one for small files and I can't figure out why yet. Spent four hours and got nowhere.",
+      "actual": [
+        "challenges"
+      ],
+      "predicted": [
+        "challenges"
+      ]
+    },
+    {
+      "id": 8,
+      "date": "Jul 27, 2026",
+      "raw_text": "Found it \u2014 I was flushing per row. Batching the writes fixed the small-file regression. Feels obvious now, always does.",
+      "actual": [
+        "growth",
+        "wins"
+      ],
+      "predicted": [
+        "wins"
+      ]
+    },
+    {
+      "id": 9,
+      "date": "Jul 28, 2026",
+      "raw_text": "Finally sat down and learned how our tracing setup actually works instead of copy-pasting spans from other services. Read the whole config. Feels slow but I'm tired of not knowing.",
+      "actual": [
+        "growth"
+      ],
+      "predicted": [
+        "growth"
+      ]
+    },
+    {
+      "id": 10,
+      "date": "Jul 31, 2026",
+      "raw_text": "Shipped the export rewrite behind a flag. Rolled it out to 10% and watched the dashboards for an hour. Nothing broke, which after last week I was not taking for granted.",
+      "actual": [
+        "challenges",
+        "wins"
+      ],
+      "predicted": [
+        "wins"
+      ]
+    },
+    {
+      "id": 1,
+      "date": "Aug 1, 2026",
+      "raw_text": "Spent most of the morning pairing with Priya on that flaky checkout test \u2014 turned out to be a race condition in how we were seeding the test DB. She shipped the fix herself Friday which honestly felt better than if I'd just done it.",
+      "actual": [
+        "collaboration",
+        "leadership"
+      ],
+      "predicted": [
+        "collaboration",
+        "wins"
+      ]
+    },
+    {
+      "id": 2,
+      "date": "Aug 2, 2026",
+      "raw_text": "Design sync with Elena's team about the new filter component. Took like 45 minutes but we agreed on one shared spec instead of both of us building slightly different versions, which is a whole week we're not going to waste.",
+      "actual": [
+        "collaboration"
+      ],
+      "predicted": [
+        "collaboration"
+      ]
+    },
+    {
+      "id": 3,
+      "date": "Aug 3, 2026",
+      "raw_text": "Reviewing Marcus's PR for the notifications batch job and noticed the retry loop had no backoff \u2014 it would've hammered the mail service on any partial outage. Flagged it, he fixed it in like ten minutes. Would've been ugly in prod.",
+      "actual": [
+        "collaboration",
+        "wins"
+      ],
+      "predicted": [
+        "collaboration"
+      ]
+    },
+    {
+      "id": 4,
+      "date": "Aug 4, 2026",
+      "raw_text": "Ran the onboarding walkthrough for Wes, our new hire. Didn't plan to spend two hours on it but he had good questions and I ended up writing down a bunch of stuff that was only in my head.",
+      "actual": [
+        "collaboration",
+        "leadership"
+      ],
+      "predicted": [
+        "collaboration",
+        "growth"
+      ]
+    },
+    {
+      "id": 5,
+      "date": "Aug 7, 2026",
+      "raw_text": "Wrote up the postmortem doc for the search latency thing from last month. Kind of dreading writing these but going back through the timeline I actually understood the failure better than when we fixed it.",
+      "actual": [
+        "growth",
+        "wins"
+      ],
+      "predicted": [
+        "growth"
+      ]
+    }
+  ]
+}
