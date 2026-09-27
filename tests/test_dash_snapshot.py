@@ -21,8 +21,8 @@ from tests.test_dash_logs import SECRET, caddy
 from tests.test_dash_probes import DEVICES, METRICS, fake_devicectl
 
 NOW = 1790368700.0
-HOST = "absolutely-innovations-candles-staff.trycloudflare.com"
-UDID = "00008150-000261540203401C"
+HOST = "sample-quick-tunnel.trycloudflare.com"
+UDID = "00008150-000A0B0C0D0E0F10"
 FLIGHT, DONE, FAILED, OLD = ("C7E4A1B9-2F3D-4B8E-9A61-3D5E7F9A1B2C", "5B2F0285-4E38-4DA8-926A-28B4184D7D79",
                              "9C1D7E3A-6B2F-4A8C-B5D4-0E9F8A7B6C5D", "1A2B3C4D-5E6F-4A8B-9C0D-1E2F3A4B5C6D")
 SAMPLE = json.loads((pathlib.Path(__file__).parent / "dash_sample_snapshot.json").read_text())

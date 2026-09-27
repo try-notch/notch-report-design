@@ -14,7 +14,7 @@ from notch_dash.live import Unreadable
 from notch_dash.logs import OWN_UA
 
 SECRET = "3f9a0c1e5b7d2f4a6c8e0b1d3f5a7c9e1b3d5f7a9c0e2b4d"
-HOST = "absolutely-innovations-candles-staff.trycloudflare.com"
+HOST = "sample-quick-tunnel.trycloudflare.com"
 METRICS = """\
 # HELP build_info Build and version information
 # TYPE build_info gauge
@@ -139,9 +139,9 @@ def test_openrouter_spend_keeps_only_the_numbers():
 DEVICES = {"result": {"devices": [
     {"properties": {"hardware": {"udid": "OTHER", "marketingName": "iPad"}}},
     {"properties": {
-        "hardware": {"udid": "00008150-000261540203401C", "marketingName": "iPhone 17 Pro", "serialNumber": "SERIAL",
+        "hardware": {"udid": "00008150-000A0B0C0D0E0F10", "marketingName": "iPhone 17 Pro", "serialNumber": "SERIAL",
                      "ecid": 123456},
-        "state": {"name": "Chetan’s iPhone", "bootState": "booted"},
+        "state": {"name": "Example iPhone", "bootState": "booted"},
         "software": {"osVersionNumber": {"stringValue": "27.0", "components": [27, 0]}},
         "connection": {"lastConnectionDate": 812061180, "pairingState": "paired", "state": "disconnected",
                        "transportType": "localNetwork", "potentialHostnames": ["x.coredevice.local"]}}},
@@ -158,8 +158,8 @@ def fake_devicectl(document):
 
 
 def test_devicectl_finds_the_phone_by_udid_and_keeps_only_what_the_page_shows():
-    phone = probes.device(fake_devicectl(DEVICES), "00008150-000261540203401C")
-    assert phone == {"name": "Chetan’s iPhone", "model": "iPhone 17 Pro", "os": "27.0", "connection": "disconnected",
+    phone = probes.device(fake_devicectl(DEVICES), "00008150-000A0B0C0D0E0F10")
+    assert phone == {"name": "Example iPhone", "model": "iPhone 17 Pro", "os": "27.0", "connection": "disconnected",
                      "pairing": "paired", "transport": "localNetwork", "last_connected_at": 1790368380.0}
     assert probes.device(fake_devicectl(DEVICES), "NOT-LISTED") is None
 
@@ -169,4 +169,4 @@ def test_a_devicectl_that_hangs_is_a_worded_failure():
         raise subprocess.TimeoutExpired(args, kwargs["timeout"])
 
     with pytest.raises(Unreadable):
-        probes.device(run, "00008150-000261540203401C")
+        probes.device(run, "00008150-000A0B0C0D0E0F10")
