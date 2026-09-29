@@ -52,6 +52,14 @@ def test_the_assembled_v4_prompts_are_what_v1_sent():
     assert (reports.SYSTEM_PROMPT, reports.WRITE_REPORT) == (prompts.REPORT_R1.system, prompts.REPORT_R1.schema)
 
 
+def test_v5_wraps_new_writing_in_the_measured_text_and_classifies_as_v4():
+    notes, _ = analysis._copied_sections(prompt_variants._SHARED_TAIL)
+    assert prompts.LABEL_V5.system == prompt_variants._SHARED_PREAMBLE + prompts._WRITING_V5 + notes
+    # Only the writing is new: categories, mood and project are asked exactly as v4 asks them.
+    assert (prompts.LABEL_V5.fallback_system, prompts.LABEL_V5.fallback_schema) == (
+        prompts.LABEL_V4.fallback_system, prompts.LABEL_V4.fallback_schema)
+
+
 def test_every_variant_resolves_and_unknown_names_do_not():
     for kind, variants in prompts.VARIANTS.items():
         for name in variants:

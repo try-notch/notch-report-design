@@ -1,0 +1,102 @@
+{
+  "about": "One fictional person's September 2026, written for eval_writing.py. Maya is a senior engineer on a payments team; every name, number and event here is invented. Fifteen notches as spoken (fillers, false starts and all), with the projects and tag vocabulary the device would send beside each. The ten marked compare are the notch-writing comparison: a rough day, a mixed day, two milestones, a quiet day, a people-heavy day, a very short one, a project called by its nickname, a day with stated numbers and recognition, and a Sunday of nerves. The other five fill out the month so the reports have a real month to write about. `expect` is one person's judgement (the prompt author's), for reading against, not an oracle.",
+  "author": {"display_name": "Maya", "role": "Senior Software Engineer", "industry": "Fintech", "years_experience": "7"},
+  "project_names": ["Checkout Revamp", "Ledger Reconciliation", "Merchant Dashboard", "Q4 Hiring"],
+  "vocabulary": ["code-review", "pairing", "planning", "oncall", "shipped", "interviews", "incident", "flaky-tests", "mentoring", "documentation", "1-on-1s", "rollout", "estimates", "design-review", "postmortem", "performance"],
+  "periods": [
+    {"id": "week", "type": "week", "range_start": "2026-09-21", "range_end": "2026-09-27", "range_label": "Sep 21 – 27"},
+    {"id": "month", "type": "month", "range_start": "2026-09-01", "range_end": "2026-09-30", "range_label": "September 2026"}
+  ],
+  "notches": [
+    {
+      "id": "55C397FF-2891-5FA4-909A-530670C40112", "slug": "sep01-planning", "date": "2026-09-01", "is_milestone": false, "compare": false,
+      "situation": "Filler: planning the month.",
+      "expect": {"mood": "up", "also_ok": ["flat"], "project": "Checkout Revamp"},
+      "transcript": "First day of September, so, planning. Me and Dev went through the checkout revamp rollout plan, um, five percent, then twenty-five, then fifty, then everyone, a few days apart, with the kill switch tested before each step. He wanted to go faster, I pushed back a bit, and we kind of met in the middle. Also blocked out the recon work for this week because those mismatches are driving finance nuts. Feels like a good month ahead. A busy one, but good."
+    },
+    {
+      "id": "E99BD6AA-4860-53C6-8A11-FFF3416A1297", "slug": "sep03-recon-cutoff", "date": "2026-09-03", "is_milestone": false, "compare": true,
+      "situation": "The project called by its nickname ('recon', 'the ledger job'); stated numbers; frustration that turns into feeling good.",
+      "expect": {"mood": "up", "also_ok": ["flat"], "project": "Ledger Reconciliation"},
+      "transcript": "Okay so, um, most of today was recon again. The ledger job. So the nightly run has been flagging like three hundred and forty mismatches every night and everyone's kind of just been, you know, living with it, finance clears them by hand in that spreadsheet. And I finally sat down and traced a bunch of them and it turns out it's the cutoff. The processor's settlement files cut off at midnight UTC and we were bucketing by Pacific time, so anything from like five p.m. to midnight landed on the wrong day. Which, honestly, I should've caught months ago, I wrote half of that code. Anyway I pushed a fix to staging and the dry run tonight was down to twelve. Twelve! So there's still twelve I don't understand but that's a way better problem to have. I was pretty frustrated this morning, like I kept going in circles, but by the end of the day I felt really good about it. Tomorrow I look at the twelve."
+    },
+    {
+      "id": "D5C9277A-92B0-509B-85BD-CC52B7451DE9", "slug": "sep08-pairing-leo", "date": "2026-09-08", "is_milestone": false, "compare": false,
+      "situation": "Filler: pairing with a junior engineer.",
+      "expect": {"mood": "up", "also_ok": ["flat"], "project": null},
+      "transcript": "Paired with Leo most of the afternoon on his first real PR to the ledger service. He's sharp but he was scared to touch the posting logic, which, fair, it's scary. We walked through how the double-entry checks work and he ended up writing the test first, on his own, without me saying anything. Morning was code reviews for the checkout team. Pretty normal day. A good one."
+    },
+    {
+      "id": "D4C24760-D481-5841-BEAC-31A37F456731", "slug": "sep09-recon-clean", "date": "2026-09-09", "is_milestone": true, "compare": true,
+      "situation": "Milestone: a months-long project lands. Recognition from finance, a stated saving that is someone else's estimate.",
+      "expect": {"mood": "up", "also_ok": [], "project": "Ledger Reconciliation"},
+      "transcript": "So the recon job ran clean. Like, the whole week. Zero mismatches, seven nights in a row. I didn't really believe it on Monday so I waited till today to say anything. The twelve from last week turned out to be refunds that got issued across the cutoff, so I fixed that too. And Hannah from finance messaged me this afternoon saying they're going to stop doing the manual spreadsheet at month end, which, that's, that was the whole point of this project. She said it's going to save her team like two days every close. I'm really, really happy about this one. It's been on my plate since, what, June? Um, yeah. I bought the team donuts. That's it."
+    },
+    {
+      "id": "867D0A95-1A44-5C44-9A11-CEEDD7F24A4B", "slug": "sep10-interviews", "date": "2026-09-10", "is_milestone": false, "compare": false,
+      "situation": "Filler: interviews and careful feedback.",
+      "expect": {"mood": "flat", "also_ok": ["down"], "project": "Q4 Hiring"},
+      "transcript": "Two interviews for the backend role today. The first one was strong on system design but kind of hand-wavy on the payments stuff. The second I think is a no, they couldn't really explain their own project. I wrote up both feedbacks in detail right after, because I hate when feedback is just, like, seemed fine. Tired. Interviews take more out of me than coding does."
+    },
+    {
+      "id": "CC786AC5-CC30-5A60-BB5F-107222919A22", "slug": "sep14-quiet", "date": "2026-09-14", "is_milestone": false, "compare": true,
+      "situation": "A quiet day: nothing to inflate.",
+      "expect": {"mood": "flat", "also_ok": ["up"], "project": null},
+      "transcript": "Pretty quiet one. Um. I spent the morning reading through the processor's docs for their new webhook version, because we're going to have to migrate at some point next quarter, and made some notes. Reviewed three PRs, one of Leo's, left a few comments, nothing big. Had a small PR myself to clean up some logging in the ledger service. That's pretty much it, honestly not much to say. It was fine. Kind of nice to have a day without meetings."
+    },
+    {
+      "id": "C6D99B28-6F08-5416-A76B-72D2C8658EBE", "slug": "sep16-people", "date": "2026-09-16", "is_milestone": false, "compare": true,
+      "situation": "A people-heavy day: five people, pride in a mentee, a tense ownership talk, exhaustion with a sense of useful work.",
+      "expect": {"mood": "flat", "also_ok": ["up"], "project": null},
+      "transcript": "Oof, okay. Today was basically all people. Started with three one-on-ones back to back. Leo's going well, he's shadowing on-call this week and he handled his first page last night by himself. Well, he pinged me after, but he'd already figured it out, which, I was really proud of him honestly. Then Aisha wants to move to the platform team and we talked about how to make that happen without it looking like she's, you know, leaving us, so I'm going to talk to her manager-to-be. And then the harder one. I had a, um, kind of tense conversation with Marcus from platform about who owns the retry logic in the payment client. It's been falling between our teams for months. We didn't fully agree but we got to, my team owns it until the new client ships, then it moves to them, and I'm going to write that down so it doesn't get relitigated. Then an interview debrief for the backend role, we're a hire on the second candidate. I'm exhausted. Like, no code at all today. But it felt like useful work, I guess."
+    },
+    {
+      "id": "D5B6A2DE-04AC-541B-9A44-688E38A9B988", "slug": "sep17-five-percent", "date": "2026-09-17", "is_milestone": false, "compare": false,
+      "situation": "Filler: the first rollout step.",
+      "expect": {"mood": "up", "also_ok": ["flat"], "project": "Checkout Revamp"},
+      "transcript": "Checkout revamp went to five percent today. Spent the morning double-checking the feature flag config with Priya and testing the kill switch in staging, then flipped it at eleven. Watched dashboards most of the afternoon. Conversion looks the same as the old flow so far, which is what we want at this stage, and no errors that aren't also on the old flow. Twenty-five percent next week if it stays quiet. Cautiously happy."
+    },
+    {
+      "id": "577137E3-4E95-5182-BA92-469A7123D18C", "slug": "sep18-dashboard-p95", "date": "2026-09-18", "is_milestone": false, "compare": true,
+      "situation": "Stated numbers (1.8 s to 600 ms), recognition, an intention to write it up.",
+      "expect": {"mood": "up", "also_ok": [], "project": "Merchant Dashboard"},
+      "transcript": "Good Friday. So the merchant dashboard has been slow for, like, ever. The transactions page was taking about one point eight seconds at p95 and merchants complain about it in basically every support thread. I finally profiled it this week, and it was, uh, it was a missing composite index on merchant ID and created-at, plus we were fetching the full refund history for every row, which we don't even show. Added the index, made the refund thing lazy, and it's at about six hundred milliseconds at p95 now, in production. Dev posted it in the product channel and said this is huge for the merchant NPS thing, which was nice. I want to write up how I profiled it because I think other people on the team could use the same approach. Anyway, good way to end the week."
+    },
+    {
+      "id": "2D8DD513-9F63-5BEE-BF30-9E8EA4319DF7", "slug": "sep21-double-charge", "date": "2026-09-21", "is_milestone": false, "compare": true,
+      "situation": "A rough day: their own change double-charged customers. Must not be softened into a success story.",
+      "expect": {"mood": "down", "also_ok": [], "project": "Checkout Revamp"},
+      "transcript": "Yeah, so, today was bad. We took checkout to fifty percent this morning, and about an hour in support started flagging double charges. It was my change. The idempotency key was getting regenerated on retry, so if the processor timed out and we retried, the customer got charged twice. Forty-one customers. We rolled back within twenty minutes and finance issued all the refunds by the afternoon, so nobody's out any money, but, like, I feel sick about it. I wrote the incident timeline and we've got the postmortem Wednesday. Priya stayed late with me to go through the retry path line by line, which I really appreciated. I just, I don't know. I tested that path. I thought I tested that path. Going to bed."
+    },
+    {
+      "id": "E668BC36-ABFB-5473-BEC6-7B042E85C6B9", "slug": "sep22-fix-and-meeting", "date": "2026-09-22", "is_milestone": false, "compare": true,
+      "situation": "A mixed day: a good fix in the morning, a meeting she's not proud of in the afternoon, drained.",
+      "expect": {"mood": "flat", "also_ok": ["down"], "project": "Checkout Revamp"},
+      "transcript": "Mixed bag today. The morning was actually good. I wrote the fix for the retry bug, the key's generated once per checkout attempt now and persisted, and I added a test that actually simulates the processor timeout, which is the test that should have existed in the first place. Priya reviewed it and caught one more case, where the retry happens after the session refreshes, so we fixed that too. Felt like we really nailed it down. Then the afternoon was, um, not great. Grace pulled me into a meeting with product and asked whether we should pause the whole rollout for a month, and I got kind of defensive, which I'm not proud of. We landed on going back to fifty percent Thursday if the postmortem goes okay. So, I don't know. Good fix, rough meeting. I'm pretty drained."
+    },
+    {
+      "id": "4B4CAA9C-A033-5B07-A6EB-4849CBE17AB6", "slug": "sep23-postmortem", "date": "2026-09-23", "is_milestone": false, "compare": false,
+      "situation": "Filler: the postmortem.",
+      "expect": {"mood": "up", "also_ok": ["flat"], "project": "Checkout Revamp"},
+      "transcript": "Postmortem was this morning. It was actually fine, blameless, like it's supposed to be. We came out with three action items: the timeout test goes into the standard checkout suite, retries get their own dashboard, and we add a canary at five percent before any big jump. I own the first one, which is already done since yesterday. Rest of the day I caught up on reviews. I feel a lot lighter than Monday."
+    },
+    {
+      "id": "528B7003-78A2-596E-98DD-BD3C8A5A1E60", "slug": "sep24-checkout-100", "date": "2026-09-24", "is_milestone": true, "compare": true,
+      "situation": "Milestone: six months of work fully out, three days after the rough day. Relief, recognition that means more because of the week.",
+      "expect": {"mood": "up", "also_ok": [], "project": "Checkout Revamp"},
+      "transcript": "Okay. Checkout's at a hundred percent. We went back to fifty this morning, watched the retry dashboard for like two hours, nothing, no double charges, conversion actually up a bit on the new flow, so we just went for it after lunch. That's the whole revamp, basically six months of work, fully out. Grace posted in the launch channel and called out the retry fix specifically, which after Tuesday meant a lot. I'm relieved more than anything. Like, genuinely relieved. Going to sleep well tonight."
+    },
+    {
+      "id": "76B543C7-F77A-570E-A689-E9B103B9BB59", "slug": "sep25-short", "date": "2026-09-25", "is_milestone": false, "compare": true,
+      "situation": "A very short notch: one thing, nothing to pad.",
+      "expect": {"mood": "flat", "also_ok": [], "project": null},
+      "transcript": "Short one. Fixed the flaky timezone test in the ledger suite. That's it, I'm done for the week."
+    },
+    {
+      "id": "63672FDD-6204-5CB1-AB2C-EFDE372C07DB", "slug": "sep27-sunday-nerves", "date": "2026-09-27", "is_milestone": false, "compare": true,
+      "situation": "A Sunday of nerves before a review: the work went fine, the feeling is anxiety, and a small relief at the end.",
+      "expect": {"mood": "down", "also_ok": ["flat"], "project": null},
+      "transcript": "It's Sunday, I know, I shouldn't be doing this. But I can't stop thinking about Tuesday. It's the architecture review for the new ledger design, the event-sourced one, and I keep rewriting the doc. I finished the diagrams today, finally, and I think the migration section is solid. But I'm pretty sure Marcus is going to go after the part where we replay events to rebuild balances, because it's slow, and I don't have a great answer for that yet. I'm, um, honestly kind of anxious about it. Okay. Writing this down helped a bit, actually."
+    }
+  ]
+}

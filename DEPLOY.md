@@ -243,6 +243,13 @@ Rolling back is pushing the older body again (`config show` prints the current o
 Switching prompt variants is a config push (`{"prompts": {"analyze": "v4"}}`); a new prompt is
 a deploy that adds a variant to `notch_api/prompts.py` first.
 
+The check is off by default. `{"prompts": {"check": "c1"}}` turns it on for analyze and
+takeaways: a third chat call reads each notch's finished writing beside its transcript and fixes
+what the transcript contradicts (who did what, done or planned, direction, whose mistake,
+recognition). It adds about 1.5 s and $0.0006 a notch, responses then carry `prompt_version`
+`v5+c1`, and `"off"` turns it off again. A check that fails or runs past its 20 s leaves the
+notch unchecked, never failed.
+
 **Accounts:** `sudo notch-admin account block <user uuid> --code abuse`, and `unblock`. A
 blocked account gets 403 `account_blocked` on processing and Notch Cloud writes.
 

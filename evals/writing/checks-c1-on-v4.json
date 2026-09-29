@@ -1,0 +1,193 @@
+{
+ "kind": "checks",
+ "variant": "c1",
+ "notches": "v4",
+ "model": "deepseek/deepseek-v4-pro-0813",
+ "run_at": "2026-09-29T19:31:34Z",
+ "results": {
+  "sep01-planning": {
+   "checked": [],
+   "spend": {
+    "cost": 0.000581,
+    "prompt_tokens": 1270,
+    "completion_tokens": 46,
+    "calls": 1
+   },
+   "seconds": 1.3
+  },
+  "sep03-recon-cutoff": {
+   "checked": [],
+   "spend": {
+    "cost": 0.000628,
+    "prompt_tokens": 1389,
+    "completion_tokens": 46,
+    "calls": 1
+   },
+   "seconds": 1.2
+  },
+  "sep08-pairing-leo": {
+   "checked": [],
+   "spend": {
+    "cost": 0.000567,
+    "prompt_tokens": 1233,
+    "completion_tokens": 46,
+    "calls": 1
+   },
+   "seconds": 1.2
+  },
+  "sep09-recon-clean": {
+   "checked": [],
+   "spend": {
+    "cost": 0.0006,
+    "prompt_tokens": 1317,
+    "completion_tokens": 46,
+    "calls": 1
+   },
+   "seconds": 1.2
+  },
+  "sep10-interviews": {
+   "checked": [],
+   "spend": {
+    "cost": 0.000557,
+    "prompt_tokens": 1205,
+    "completion_tokens": 46,
+    "calls": 1
+   },
+   "seconds": 1.7
+  },
+  "sep14-quiet": {
+   "checked": [],
+   "spend": {
+    "cost": 0.000588,
+    "prompt_tokens": 1257,
+    "completion_tokens": 46,
+    "calls": 1
+   },
+   "seconds": 1.6
+  },
+  "sep16-people": {
+   "checked": [
+    {
+     "item": "takeaway 3",
+     "text": "The interview debrief for the backend role is a hire on the second candidate.",
+     "quote": "an interview debrief for the backend role, we're a hire on the second candidate",
+     "was": "You're a hire on the second backend candidate."
+    }
+   ],
+   "spend": {
+    "cost": 0.000902,
+    "prompt_tokens": 1399,
+    "completion_tokens": 129,
+    "calls": 1
+   },
+   "seconds": 1.2
+  },
+  "sep17-five-percent": {
+   "checked": [],
+   "spend": {
+    "cost": 0.000603,
+    "prompt_tokens": 1281,
+    "completion_tokens": 46,
+    "calls": 1
+   },
+   "seconds": 1.6
+  },
+  "sep18-dashboard-p95": {
+   "checked": [],
+   "spend": {
+    "cost": 0.000389,
+    "prompt_tokens": 1367,
+    "completion_tokens": 46,
+    "calls": 1
+   },
+   "seconds": 1.3
+  },
+  "sep21-double-charge": {
+   "checked": [
+    {
+     "item": "takeaway 2",
+     "text": "Your idempotency key was regenerated on retry so processor timeouts double-charged customers",
+     "quote": "It was my change. The idempotency key was getting regenerated on retry",
+     "was": "The idempotency key was regenerated on retry so processor timeouts double-charged customers"
+    },
+    {
+     "item": "summary",
+     "text": "You rolled checkout out to fifty percent and it caused forty-one double charges from your regenerated idempotency key. You rolled back within twenty minutes and finance refunded everyone the same day.",
+     "quote": "It was my change. The idempotency key was getting regenerated on retry",
+     "was": "You rolled checkout out to fifty percent and it caused forty-one double charges from a regenerated idempotency key. You rolled back within twenty minutes and finance refunded everyone the same day."
+    }
+   ],
+   "spend": {
+    "cost": 0.000625,
+    "prompt_tokens": 1333,
+    "completion_tokens": 177,
+    "calls": 1
+   },
+   "seconds": 2.4
+  },
+  "sep22-fix-and-meeting": {
+   "checked": [
+    {
+     "item": "takeaway 3",
+     "text": "The product meeting left you defensive and drained.",
+     "quote": "I got kind of defensive, which I'm not proud of.",
+     "was": "The product meeting got defensive and left you drained."
+    }
+   ],
+   "spend": {
+    "cost": 0.000478,
+    "prompt_tokens": 1384,
+    "completion_tokens": 86,
+    "calls": 1
+   },
+   "seconds": 1.6
+  },
+  "sep23-postmortem": {
+   "checked": [
+    {
+     "item": "summary",
+     "text": "The postmortem was this morning; it went fine and stayed blameless, producing three action items: a timeout test in the standard checkout suite, a retries dashboard, and a five-percent canary before big jumps. You own the first item, already done yesterday, and spent the rest of the day catching up on reviews.",
+     "quote": "Postmortem was this morning.",
+     "was": "You ran the postmortem this morning; it went fine and stayed blameless, producing three action items: a timeout test in the standard checkout suite, a retries dashboard, and a five-percent canary before big jumps. You own the first item, already done yesterday, and spent the rest of the day catching up on reviews."
+    }
+   ],
+   "spend": {
+    "cost": 0.000506,
+    "prompt_tokens": 1266,
+    "completion_tokens": 137,
+    "calls": 1
+   },
+   "seconds": 1.8
+  },
+  "sep24-checkout-100": {
+   "checked": [],
+   "spend": {
+    "cost": 0.000334,
+    "prompt_tokens": 1277,
+    "completion_tokens": 46,
+    "calls": 1
+   },
+   "seconds": 0.8
+  },
+  "sep25-short": {
+   "checked": [],
+   "spend": {
+    "cost": 0.000236,
+    "prompt_tokens": 1115,
+    "completion_tokens": 46,
+    "calls": 1
+   },
+   "seconds": 0.9
+  },
+  "sep27-sunday-nerves": {
+   "checked": [],
+   "spend": {
+    "cost": 0.000344,
+    "prompt_tokens": 1293,
+    "completion_tokens": 46,
+    "calls": 1
+   },
+   "seconds": 0.8
+  }
+ }
+}

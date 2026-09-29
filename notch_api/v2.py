@@ -122,6 +122,17 @@ def _transcript(value, cfg):
     return value.strip()
 
 
+def _writing_prompts(cfg, kind):
+    """
+    (labels, check, prompt_version) for analyze or takeaways: remote config's variant for
+    `kind`, and its check, or None when that is "off". The version names both ("v5+c1"),
+    so a notch says which words wrote it and whether they were checked.
+    """
+    version, check_name = cfg["prompts"][kind], cfg["prompts"]["check"]
+    check = prompts.variant("check", check_name)
+    return prompts.variant(kind, version), check, version if check is None else f"{version}+{check_name}"
+
+
 def _date(value, name):
     try:
         return store.parse_date(value)
@@ -443,14 +454,14 @@ class V2:
         self.inflight.enter(caller.user_id, cfg["max_in_flight"])
         try:
             raw, transcript, project_names, vocabulary = await self._labelled_body(request, caller)
-            version = cfg["prompts"][kind]
-            labels = prompts.variant(kind, version)
+            labels, check, version = _writing_prompts(cfg, kind)
 
             def work(bound, extras):
                 return analysis.analyze_text(
                     bound, transcript, project_names=project_names, vocabulary=vocabulary, labels=labels,
                     classifier=cfg["classifier"], max_tokens=cfg["chat"]["max_tokens_analyze"],
-                    thresholds=cfg["category_thresholds"], project_confidence=cfg["project_confidence"])
+                    thresholds=cfg["category_thresholds"], project_confidence=cfg["project_confidence"],
+                    check=check)
 
             def respond(result, usage, extras):
                 return {"summary": result["summary"], "takeaways": result["takeaways"], "tags": result["tags"],
@@ -475,12 +486,12 @@ class V2:
         self.inflight.enter(caller.user_id, cfg["max_in_flight"])
         try:
             raw, transcript, project_names, vocabulary = await self._labelled_body(request, caller)
-            version = cfg["prompts"][kind]
-            labels = prompts.variant(kind, version)
+            labels, check, version = _writing_prompts(cfg, kind)
 
             def work(bound, extras):
                 return analysis.write_takeaways(bound, transcript, project_names=project_names, vocabulary=vocabulary,
-                                                labels=labels, max_tokens=cfg["chat"]["max_tokens_analyze"])
+                                                labels=labels, max_tokens=cfg["chat"]["max_tokens_analyze"],
+                                                check=check)
 
             def respond(result, usage, extras):
                 return {"takeaways": result["takeaways"], "tags": result["tags"], "config_version": cfg.version,
