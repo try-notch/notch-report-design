@@ -1,0 +1,313 @@
+{
+ "kind": "reports",
+ "variant": "r1",
+ "notches": "v4",
+ "model": "deepseek/deepseek-v4-pro-0813",
+ "run_at": "2026-09-29T17:14:32Z",
+ "results": {
+  "week": {
+   "facts": {
+    "notch_count": 6,
+    "project_count": 2,
+    "milestone_count": 1,
+    "project_breakdown": [
+     {
+      "name": "Checkout Revamp",
+      "notch_count": 4,
+      "share": 66
+     },
+     {
+      "name": "Ledger Reconciliation",
+      "notch_count": 2,
+      "share": 33
+     }
+    ],
+    "momentum": [
+     {
+      "date": "2026-09-21",
+      "count": 1
+     },
+     {
+      "date": "2026-09-22",
+      "count": 1
+     },
+     {
+      "date": "2026-09-23",
+      "count": 1
+     },
+     {
+      "date": "2026-09-24",
+      "count": 1
+     },
+     {
+      "date": "2026-09-25",
+      "count": 1
+     },
+     {
+      "date": "2026-09-26",
+      "count": 0
+     },
+     {
+      "date": "2026-09-27",
+      "count": 1
+     }
+    ],
+    "momentum_granularity": "day",
+    "eyebrow": "Weekly report · Sep 21 – 27"
+   },
+   "headline": "Forty-one double charges, fully refunded",
+   "lede": "The week opened with a hard incident and closed with the Checkout Revamp fully shipped. In between, you fixed the bug, ran a clean postmortem, and turned the whole thing into a stronger rollout process.",
+   "body": "You moved fast when it counted. The fifty percent rollout caused forty-one double charges from a regenerated idempotency key, and you rolled back within twenty minutes, with finance refunding everyone the same day. The next morning you wrote the fix — the key is now generated once per checkout attempt and persisted — plus the timeout test that should have existed in the first place. Priya caught the session-refresh case, and by Thursday the revamp was at a hundred percent with no double charges and conversion up on the new flow.\n\nYou already know how to own a mistake end to end: roll back, write the timeline, run the postmortem, ship the fix. The next version of that is staying open in the room when the stakes feel personal. Tuesday's meeting with Grace and product got defensive, and you named that yourself — the same honesty that made the postmortem blameless is the thing to bring into those conversations before they heat up.\n\nThe postmortem itself is work that rarely gets counted. It stayed blameless and produced three concrete action items — a timeout test in the standard suite, a retries dashboard, and a five-percent canary before big jumps — and you'd already finished your own action item a day early. That's the kind of thing that quietly makes the next incident smaller.\n\nGoing into next week, the ledger architecture review is the live thread. You've finished the diagrams and the migration section, and you're anxious Marcus will push on the slow event-replay approach for rebuilding balances. You don't need the perfect answer yet — you need a first answer, and you've already got the doc in shape to have that conversation.",
+   "themes": [
+    "rollout",
+    "postmortem",
+    "retry-fix",
+    "flaky-tests",
+    "design-review"
+   ],
+   "highlights": [
+    {
+     "title": "Rolled back in twenty minutes",
+     "detail": "forty-one double charges caught, rolled back, and all refunds issued same day",
+     "kind": "collaboration",
+     "source_entry_ids": [
+      "2D8DD513-9F63-5BEE-BF30-9E8EA4319DF7"
+     ]
+    },
+    {
+     "title": "Retry fix shipped",
+     "detail": "key generated once per attempt and persisted, with a timeout test",
+     "kind": "shipped",
+     "source_entry_ids": [
+      "E668BC36-ABFB-5473-BEC6-7B042E85C6B9"
+     ]
+    },
+    {
+     "title": "Checkout Revamp at 100%",
+     "detail": "six months of work fully out with no double charges",
+     "kind": "milestone",
+     "source_entry_ids": [
+      "528B7003-78A2-596E-98DD-BD3C8A5A1E60"
+     ]
+    },
+    {
+     "title": "Blameless postmortem, three action items",
+     "detail": "timeout test, retries dashboard, and a five-percent canary",
+     "kind": "note",
+     "source_entry_ids": [
+      "4B4CAA9C-A033-5B07-A6EB-4849CBE17AB6"
+     ]
+    }
+   ],
+   "spend": {
+    "cost": 0.003574,
+    "prompt_tokens": 3288,
+    "completion_tokens": 804,
+    "calls": 1
+   }
+  },
+  "month": {
+   "facts": {
+    "notch_count": 15,
+    "project_count": 4,
+    "milestone_count": 2,
+    "project_breakdown": [
+     {
+      "name": "Checkout Revamp",
+      "notch_count": 6,
+      "share": 40
+     },
+     {
+      "name": "Ledger Reconciliation",
+      "notch_count": 6,
+      "share": 40
+     },
+     {
+      "name": "Q4 Hiring",
+      "notch_count": 2,
+      "share": 13
+     },
+     {
+      "name": "Merchant Dashboard",
+      "notch_count": 1,
+      "share": 6
+     }
+    ],
+    "momentum": [
+     {
+      "date": "2026-09-01",
+      "count": 1
+     },
+     {
+      "date": "2026-09-02",
+      "count": 0
+     },
+     {
+      "date": "2026-09-03",
+      "count": 1
+     },
+     {
+      "date": "2026-09-04",
+      "count": 0
+     },
+     {
+      "date": "2026-09-05",
+      "count": 0
+     },
+     {
+      "date": "2026-09-06",
+      "count": 0
+     },
+     {
+      "date": "2026-09-07",
+      "count": 0
+     },
+     {
+      "date": "2026-09-08",
+      "count": 1
+     },
+     {
+      "date": "2026-09-09",
+      "count": 1
+     },
+     {
+      "date": "2026-09-10",
+      "count": 1
+     },
+     {
+      "date": "2026-09-11",
+      "count": 0
+     },
+     {
+      "date": "2026-09-12",
+      "count": 0
+     },
+     {
+      "date": "2026-09-13",
+      "count": 0
+     },
+     {
+      "date": "2026-09-14",
+      "count": 1
+     },
+     {
+      "date": "2026-09-15",
+      "count": 0
+     },
+     {
+      "date": "2026-09-16",
+      "count": 1
+     },
+     {
+      "date": "2026-09-17",
+      "count": 1
+     },
+     {
+      "date": "2026-09-18",
+      "count": 1
+     },
+     {
+      "date": "2026-09-19",
+      "count": 0
+     },
+     {
+      "date": "2026-09-20",
+      "count": 0
+     },
+     {
+      "date": "2026-09-21",
+      "count": 1
+     },
+     {
+      "date": "2026-09-22",
+      "count": 1
+     },
+     {
+      "date": "2026-09-23",
+      "count": 1
+     },
+     {
+      "date": "2026-09-24",
+      "count": 1
+     },
+     {
+      "date": "2026-09-25",
+      "count": 1
+     },
+     {
+      "date": "2026-09-26",
+      "count": 0
+     },
+     {
+      "date": "2026-09-27",
+      "count": 1
+     },
+     {
+      "date": "2026-09-28",
+      "count": 0
+     },
+     {
+      "date": "2026-09-29",
+      "count": 0
+     },
+     {
+      "date": "2026-09-30",
+      "count": 0
+     }
+    ],
+    "momentum_granularity": "day",
+    "eyebrow": "Monthly report · September 2026"
+   },
+   "headline": "From forty-one double charges to one hundred percent",
+   "lede": "September was a month of finishing things you'd been carrying for months: the recon cleanup that started in June finally landed, and Checkout Revamp went from five percent to fully out, with one bad day in the middle that you handled cleanly.",
+   "body": "The ledger reconciliation work paid off in full. You traced the nightly mismatches to a UTC-versus-Pacific timezone cutoff, pushed a fix, and watched the dry run drop from 340 mismatches to 12. A few days later the job ran clean for seven nights straight with zero mismatches, and Hannah from finance confirmed her team is dropping the manual month-end spreadsheet — saving about two days every close. You also paired with Leo on his first real PR and he wrote his first test on his own before you could prompt him.\n\nThe checkout rollout tested you. You shipped to five percent with conversion matching the old flow, and then the jump to fifty percent caused forty-one double charges from a regenerated idempotency key. You rolled back within twenty minutes and finance refunded everyone the same day. What stands out is the shape of your recovery — you already run blameless postmortems and build the test that should have existed in the first place. The next version of that instinct is writing that test before the rollout that needs it, not after; you're already most of the way there.\n\nSome of the month's most useful work never got a ticket. You wrote detailed interview feedback rather than \"seemed fine\" notes, read the processor's new webhook docs and made migration notes for next quarter with nobody asking, and cleaned up ledger logging on a quiet Monday. That's the kind of thing that disappears unless it breaks — it didn't break this month, and you should say that out loud at review time.\n\nYou ended the month anxious about Tuesday's architecture review, specifically the slow event-replay path for rebuilding balances. You finished the diagrams and found that writing it down helped. The concrete next move is to give Marcus the event-replay concern directly with a rough number in hand, rather than waiting for him to raise it — you've earned the credibility to name the gap yourself.",
+   "themes": [
+    "rollout",
+    "reconciliation",
+    "postmortem",
+    "pairing",
+    "mentoring"
+   ],
+   "highlights": [
+    {
+     "title": "Recon job ran clean",
+     "detail": "seven nights with zero mismatches after the timezone fix, and finance dropped their manual spreadsheet",
+     "kind": "milestone",
+     "source_entry_ids": [
+      "D4C24760-D481-5841-BEAC-31A37F456731"
+     ]
+    },
+    {
+     "title": "Checkout Revamp fully out",
+     "detail": "shipped at one hundred percent with no double charges after watching the retry dashboard",
+     "kind": "milestone",
+     "source_entry_ids": [
+      "528B7003-78A2-596E-98DD-BD3C8A5A1E60"
+     ]
+    },
+    {
+     "title": "Double charges rolled back",
+     "detail": "rolled back within twenty minutes and all forty-one customers were refunded the same day",
+     "kind": "note",
+     "source_entry_ids": [
+      "2D8DD513-9F63-5BEE-BF30-9E8EA4319DF7"
+     ]
+    },
+    {
+     "title": "Dashboard at six hundred milliseconds",
+     "detail": "profiled the transactions page from one point eight seconds to about six hundred milliseconds",
+     "kind": "shipped",
+     "source_entry_ids": [
+      "577137E3-4E95-5182-BA92-469A7123D18C"
+     ]
+    }
+   ],
+   "spend": {
+    "cost": 0.006006,
+    "prompt_tokens": 6124,
+    "completion_tokens": 847,
+    "calls": 1
+   }
+  }
+ }
+}

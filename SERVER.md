@@ -57,6 +57,7 @@ and resets the profile and settings to their defaults. The user row stays.
 ```bash
 .venv/bin/python -m notch_api.seed               # the 52 demo transcripts, analysed for real
 .venv/bin/python -m notch_api.eval_categories    # Jev vs the chat model on the hand labels
+.venv/bin/python eval_writing.py show --notches v4 v5 --reports r1 r2   # the writing variants, side by side
 .venv/bin/python -m notch_api.admin config show  # /v2's remote config (NOTCH_METER_DB)
 .venv/bin/python -m pytest -q                    # offline, ~25 s
 .venv/bin/python e2e/run_e2e.py --offline        # the /v1 flow on fakes, ~2 s
