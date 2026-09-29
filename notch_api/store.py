@@ -157,6 +157,27 @@ def normalize_tags(tags):
     return out
 
 
+def project_echo(project_names):
+    """
+    A test for a normalised tag or theme that repeats a project, which has its own chip (§3.4):
+    the project's whole name, or a piece of the tag (split at '-') that is a word of a project's
+    name, extends one ('dashboards'), or at five letters or more is a short form of one ('recon').
+    Words under four letters never count. So 'recon', 'reconciliation' and 'ledger-recon' echo
+    Ledger Reconciliation and 'hiring' echoes Q4 Hiring, while 'code-review' beside Checkout
+    Revamp and 'data-quality' beside Database Migration do not. Only the names given are used:
+    nothing about the user is kept.
+    """
+    whole = {normalize_tag(name) for name in project_names if isinstance(name, str)}
+    words = {w for name in project_names if isinstance(name, str)
+             for w in re.findall(r"[a-z0-9]+", name.lower()) if len(w) >= 4}
+
+    def echoes(tag):
+        return tag in whole or any(
+            part.startswith(word) or (len(part) >= 5 and word.startswith(part))
+            for part in tag.split("-") if len(part) >= 4 for word in words)
+    return echoes
+
+
 def _tags_normalized(text):
     """schema.sql's CHECK for tags/themes: a JSON array that normalize_tags leaves unchanged."""
     try:

@@ -38,7 +38,7 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-from notch_api import analysis, prompts, v2, wire_v2
+from notch_api import analysis, prompts, store, v2, wire_v2
 from notch_api.openrouter import ModelError, OpenRouterClient, Usage
 from notch_api.remote_config import DEFAULTS
 
@@ -212,10 +212,8 @@ def _stock(text):
 
 
 def _echoes_project(tag, project_names):
-    """A tag that is, or is a piece of, a project's name ('recon' for Ledger Reconciliation)."""
-    words = {w for name in project_names for w in re.findall(r"[a-z0-9]+", name.lower()) if len(w) >= 4}
-    return any(len(part) >= 4 and any(w.startswith(part) or part.startswith(w) for w in words)
-               for part in tag.split("-"))
+    """A tag that repeats a project ('recon' for Ledger Reconciliation), by the server's own test."""
+    return store.project_echo(project_names)(tag)
 
 
 def show_notches(data, runs):

@@ -203,10 +203,10 @@ def _classified(raw):
 
 
 def _write(client, user, project_names, parse=_written, *, labels=prompts.LABEL_V4, max_tokens=MAX_TOKENS):
-    """label_entry's writing, less any tag that is a project's name (§3.4: the project is not a tag)."""
+    """label_entry's writing, less any tag that repeats a project (§3.4: the project is not a tag)."""
     written = _label(client, user, labels.system, labels.schema, parse, max_tokens)
-    projects = {store.normalize_tag(name) for name in project_names}
-    return written | {"tags": [t for t in written["tags"] if t not in projects]}
+    echoes = store.project_echo(project_names)
+    return written | {"tags": [t for t in written["tags"] if not echoes(t)]}
 
 
 def _rewritten(raw):

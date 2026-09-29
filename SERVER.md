@@ -248,7 +248,10 @@ Python function every connection registers; `users.reminder_weekdays` has no sub
 
 **Decisions of this branch:**
 - Tags are the app's hashtags: lowercase, hyphenated (`flaky-tests`), never a project name
-  (§3.4 stops mirroring the project into tags) or a category name.
+  (§3.4 stops mirroring the project into tags) or a category name. The server drops a tag or a
+  report theme that repeats a project, whole or by a word or short form of its name ('recon'
+  beside Ledger Reconciliation), using only the project names sent with the request
+  (`store.project_echo`).
 - `users` keeps `industry` and `years_experience` (register A1), which §3.1's DDL omits.
 - Internal columns never sent: `entries.categories`, `category_scores`, `classified_by`;
   `reports.project_id` and `tag` record a report's scope.
