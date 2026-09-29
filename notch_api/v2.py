@@ -738,8 +738,7 @@ def write_report(client, req, facts, writer, *, transcripts, max_tokens, tempera
     """One forced write_report call -> (prose, themes, highlights), repaired by reports._clean."""
     report_ids = {e["id"] for e in req["entries"]}
     milestone_ids = {e["id"] for e in req["entries"] if e["is_milestone"]}
-    projects = {store.normalize_tag(name) for name in req["project_names"]
-                + [e["project_name"] for e in req["entries"] if e["project_name"]]}
+    projects = req["project_names"] + [e["project_name"] for e in req["entries"] if e["project_name"]]
     return client.tool_call(
         system=writer.system, user=report_message(req, facts, transcripts=transcripts), tool_name="write_report",
         description="Write the Notch report document for this range.", parameters=writer.schema,
