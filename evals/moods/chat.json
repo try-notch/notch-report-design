@@ -1,0 +1,680 @@
+{
+ "classifier": "chat",
+ "model": "deepseek/deepseek-v4-pro-0813",
+ "runs": 3,
+ "run_at": "2026-09-29T20:25:22Z",
+ "results": {
+  "sep01-planning": [
+   {
+    "mood": "up",
+    "project_name": "Checkout Revamp",
+    "categories": [
+     "collaboration",
+     "leadership"
+    ],
+    "spend": {
+     "cost": 0.000822,
+     "prompt_tokens": 2377,
+     "completion_tokens": 293,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "up",
+    "project_name": "Checkout Revamp",
+    "categories": [
+     "collaboration",
+     "leadership"
+    ],
+    "spend": {
+     "cost": 0.000814,
+     "prompt_tokens": 2377,
+     "completion_tokens": 289,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "up",
+    "project_name": "Checkout Revamp",
+    "categories": [
+     "collaboration"
+    ],
+    "spend": {
+     "cost": 0.000794,
+     "prompt_tokens": 2377,
+     "completion_tokens": 279,
+     "calls": 1
+    }
+   }
+  ],
+  "sep03-recon-cutoff": [
+   {
+    "mood": "up",
+    "project_name": "Ledger Reconciliation",
+    "categories": [
+     "challenges",
+     "growth",
+     "wins"
+    ],
+    "spend": {
+     "cost": 0.000907,
+     "prompt_tokens": 2476,
+     "completion_tokens": 306,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "up",
+    "project_name": "Ledger Reconciliation",
+    "categories": [
+     "challenges",
+     "growth",
+     "wins"
+    ],
+    "spend": {
+     "cost": 0.000915,
+     "prompt_tokens": 2476,
+     "completion_tokens": 310,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "up",
+    "project_name": "Ledger Reconciliation",
+    "categories": [
+     "challenges",
+     "growth",
+     "wins"
+    ],
+    "spend": {
+     "cost": 0.000931,
+     "prompt_tokens": 2476,
+     "completion_tokens": 318,
+     "calls": 1
+    }
+   }
+  ],
+  "sep08-pairing-leo": [
+   {
+    "mood": "up",
+    "project_name": "Ledger Reconciliation",
+    "categories": [
+     "collaboration",
+     "growth",
+     "leadership"
+    ],
+    "spend": {
+     "cost": 0.00076,
+     "prompt_tokens": 2356,
+     "completion_tokens": 268,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "up",
+    "project_name": "Ledger Reconciliation",
+    "categories": [
+     "collaboration",
+     "growth",
+     "leadership"
+    ],
+    "spend": {
+     "cost": 0.000766,
+     "prompt_tokens": 2356,
+     "completion_tokens": 271,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "up",
+    "project_name": "Ledger Reconciliation",
+    "categories": [
+     "collaboration",
+     "growth",
+     "leadership"
+    ],
+    "spend": {
+     "cost": 0.000766,
+     "prompt_tokens": 2356,
+     "completion_tokens": 271,
+     "calls": 1
+    }
+   }
+  ],
+  "sep09-recon-clean": [
+   {
+    "mood": "up",
+    "project_name": "Ledger Reconciliation",
+    "categories": [
+     "collaboration",
+     "growth",
+     "wins"
+    ],
+    "spend": {
+     "cost": 0.000906,
+     "prompt_tokens": 2426,
+     "completion_tokens": 321,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "up",
+    "project_name": "Ledger Reconciliation",
+    "categories": [
+     "collaboration",
+     "growth",
+     "wins"
+    ],
+    "spend": {
+     "cost": 0.000902,
+     "prompt_tokens": 2426,
+     "completion_tokens": 319,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "up",
+    "project_name": "Ledger Reconciliation",
+    "categories": [
+     "collaboration",
+     "growth",
+     "wins"
+    ],
+    "spend": {
+     "cost": 0.000891,
+     "prompt_tokens": 2426,
+     "completion_tokens": 313,
+     "calls": 1
+    }
+   }
+  ],
+  "sep10-interviews": [
+   {
+    "mood": "flat",
+    "project_name": "Q4 Hiring",
+    "categories": [
+     "challenges",
+     "collaboration",
+     "leadership"
+    ],
+    "spend": {
+     "cost": 0.000739,
+     "prompt_tokens": 2354,
+     "completion_tokens": 258,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "flat",
+    "project_name": "Q4 Hiring",
+    "categories": [
+     "collaboration",
+     "growth",
+     "leadership"
+    ],
+    "spend": {
+     "cost": 0.000745,
+     "prompt_tokens": 2354,
+     "completion_tokens": 261,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "flat",
+    "project_name": "Q4 Hiring",
+    "categories": [
+     "challenges",
+     "collaboration",
+     "leadership"
+    ],
+    "spend": {
+     "cost": 0.000745,
+     "prompt_tokens": 2354,
+     "completion_tokens": 261,
+     "calls": 1
+    }
+   }
+  ],
+  "sep14-quiet": [
+   {
+    "mood": "flat",
+    "project_name": "Ledger Reconciliation",
+    "categories": [
+     "collaboration"
+    ],
+    "spend": {
+     "cost": 0.000787,
+     "prompt_tokens": 2374,
+     "completion_tokens": 276,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "flat",
+    "project_name": "Ledger Reconciliation",
+    "categories": [
+     "collaboration"
+    ],
+    "spend": {
+     "cost": 0.000787,
+     "prompt_tokens": 2374,
+     "completion_tokens": 276,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "flat",
+    "project_name": "Ledger Reconciliation",
+    "categories": [
+     "collaboration"
+    ],
+    "spend": {
+     "cost": 0.00079,
+     "prompt_tokens": 2374,
+     "completion_tokens": 278,
+     "calls": 1
+    }
+   }
+  ],
+  "sep16-people": [
+   {
+    "mood": "flat",
+    "project_name": "Q4 Hiring",
+    "categories": [
+     "collaboration",
+     "leadership"
+    ],
+    "spend": {
+     "cost": 0.001812,
+     "prompt_tokens": 2516,
+     "completion_tokens": 336,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "flat",
+    "project_name": "Q4 Hiring",
+    "categories": [
+     "collaboration",
+     "leadership"
+    ],
+    "spend": {
+     "cost": 0.001588,
+     "prompt_tokens": 2516,
+     "completion_tokens": 319,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "flat",
+    "project_name": "Q4 Hiring",
+    "categories": [
+     "collaboration",
+     "leadership"
+    ],
+    "spend": {
+     "cost": 0.001586,
+     "prompt_tokens": 2516,
+     "completion_tokens": 318,
+     "calls": 1
+    }
+   }
+  ],
+  "sep17-five-percent": [
+   {
+    "mood": "up",
+    "project_name": "Checkout Revamp",
+    "categories": [
+     "collaboration",
+     "wins"
+    ],
+    "spend": {
+     "cost": 0.001658,
+     "prompt_tokens": 2367,
+     "completion_tokens": 297,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "up",
+    "project_name": "Checkout Revamp",
+    "categories": [
+     "collaboration",
+     "wins"
+    ],
+    "spend": {
+     "cost": 0.001482,
+     "prompt_tokens": 2367,
+     "completion_tokens": 291,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "up",
+    "project_name": "Checkout Revamp",
+    "categories": [
+     "collaboration",
+     "wins"
+    ],
+    "spend": {
+     "cost": 0.001491,
+     "prompt_tokens": 2367,
+     "completion_tokens": 295,
+     "calls": 1
+    }
+   }
+  ],
+  "sep18-dashboard-p95": [
+   {
+    "mood": "up",
+    "project_name": "Merchant Dashboard",
+    "categories": [
+     "challenges",
+     "leadership",
+     "wins"
+    ],
+    "spend": {
+     "cost": 0.001601,
+     "prompt_tokens": 2441,
+     "completion_tokens": 328,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "up",
+    "project_name": "Merchant Dashboard",
+    "categories": [
+     "growth",
+     "leadership",
+     "wins"
+    ],
+    "spend": {
+     "cost": 0.001561,
+     "prompt_tokens": 2441,
+     "completion_tokens": 320,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "up",
+    "project_name": "Merchant Dashboard",
+    "categories": [
+     "leadership",
+     "wins"
+    ],
+    "spend": {
+     "cost": 0.001581,
+     "prompt_tokens": 2441,
+     "completion_tokens": 328,
+     "calls": 1
+    }
+   }
+  ],
+  "sep21-double-charge": [
+   {
+    "mood": "down",
+    "project_name": "Checkout Revamp",
+    "categories": [
+     "challenges",
+     "collaboration",
+     "growth"
+    ],
+    "spend": {
+     "cost": 0.000944,
+     "prompt_tokens": 2437,
+     "completion_tokens": 337,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "down",
+    "project_name": "Checkout Revamp",
+    "categories": [
+     "challenges",
+     "collaboration"
+    ],
+    "spend": {
+     "cost": 0.001577,
+     "prompt_tokens": 2437,
+     "completion_tokens": 319,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "down",
+    "project_name": "Checkout Revamp",
+    "categories": [
+     "challenges",
+     "collaboration",
+     "growth"
+    ],
+    "spend": {
+     "cost": 0.000962,
+     "prompt_tokens": 2437,
+     "completion_tokens": 346,
+     "calls": 1
+    }
+   }
+  ],
+  "sep22-fix-and-meeting": [
+   {
+    "mood": "down",
+    "project_name": "Checkout Revamp",
+    "categories": [
+     "collaboration",
+     "growth",
+     "wins"
+    ],
+    "spend": {
+     "cost": 0.000976,
+     "prompt_tokens": 2447,
+     "completion_tokens": 350,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "down",
+    "project_name": "Checkout Revamp",
+    "categories": [
+     "collaboration",
+     "growth",
+     "wins"
+    ],
+    "spend": {
+     "cost": 0.000976,
+     "prompt_tokens": 2447,
+     "completion_tokens": 350,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "down",
+    "project_name": "Checkout Revamp",
+    "categories": [
+     "collaboration",
+     "growth",
+     "wins"
+    ],
+    "spend": {
+     "cost": 0.000968,
+     "prompt_tokens": 2447,
+     "completion_tokens": 346,
+     "calls": 1
+    }
+   }
+  ],
+  "sep23-postmortem": [
+   {
+    "mood": "up",
+    "project_name": "Checkout Revamp",
+    "categories": [
+     "collaboration",
+     "wins"
+    ],
+    "spend": {
+     "cost": 0.000835,
+     "prompt_tokens": 2366,
+     "completion_tokens": 303,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "up",
+    "project_name": "Checkout Revamp",
+    "categories": [
+     "collaboration",
+     "wins"
+    ],
+    "spend": {
+     "cost": 0.000842,
+     "prompt_tokens": 2366,
+     "completion_tokens": 307,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "up",
+    "project_name": "Checkout Revamp",
+    "categories": [
+     "collaboration",
+     "wins"
+    ],
+    "spend": {
+     "cost": 0.000835,
+     "prompt_tokens": 2366,
+     "completion_tokens": 303,
+     "calls": 1
+    }
+   }
+  ],
+  "sep24-checkout-100": [
+   {
+    "mood": "up",
+    "project_name": "Checkout Revamp",
+    "categories": [
+     "challenges",
+     "wins"
+    ],
+    "spend": {
+     "cost": 0.000854,
+     "prompt_tokens": 2382,
+     "completion_tokens": 308,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "up",
+    "project_name": "Checkout Revamp",
+    "categories": [
+     "challenges",
+     "wins"
+    ],
+    "spend": {
+     "cost": 0.000844,
+     "prompt_tokens": 2382,
+     "completion_tokens": 303,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "up",
+    "project_name": "Checkout Revamp",
+    "categories": [
+     "collaboration",
+     "wins"
+    ],
+    "spend": {
+     "cost": 0.000842,
+     "prompt_tokens": 2382,
+     "completion_tokens": 302,
+     "calls": 1
+    }
+   }
+  ],
+  "sep25-short": [
+   {
+    "mood": "flat",
+    "project_name": "Ledger Reconciliation",
+    "categories": [
+     "wins"
+    ],
+    "spend": {
+     "cost": 0.000757,
+     "prompt_tokens": 2299,
+     "completion_tokens": 216,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "flat",
+    "project_name": "Ledger Reconciliation",
+    "categories": [
+     "wins"
+    ],
+    "spend": {
+     "cost": 0.000757,
+     "prompt_tokens": 2299,
+     "completion_tokens": 216,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "flat",
+    "project_name": "Ledger Reconciliation",
+    "categories": [
+     "wins"
+    ],
+    "spend": {
+     "cost": 0.000757,
+     "prompt_tokens": 2299,
+     "completion_tokens": 216,
+     "calls": 1
+    }
+   }
+  ],
+  "sep27-sunday-nerves": [
+   {
+    "mood": "flat",
+    "project_name": "Ledger Reconciliation",
+    "categories": [
+     "challenges",
+     "growth"
+    ],
+    "spend": {
+     "cost": 0.000807,
+     "prompt_tokens": 2398,
+     "completion_tokens": 279,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "flat",
+    "project_name": "Ledger Reconciliation",
+    "categories": [
+     "challenges",
+     "growth"
+    ],
+    "spend": {
+     "cost": 0.000829,
+     "prompt_tokens": 2398,
+     "completion_tokens": 290,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "down",
+    "project_name": "Ledger Reconciliation",
+    "categories": [
+     "challenges",
+     "growth"
+    ],
+    "spend": {
+     "cost": 0.000805,
+     "prompt_tokens": 2398,
+     "completion_tokens": 278,
+     "calls": 1
+    }
+   }
+  ]
+ }
+}
