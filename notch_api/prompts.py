@@ -236,7 +236,11 @@ LABEL_ENTRY_FALLBACK = _closed({
 # with the result. v5 won where it was more accurate (who did what, digits). So bullets are capped
 # at 12 words with no dash or semicolon joins, a stated plan is kept, a feeling about one thing
 # rides in that thing's bullet while the day's overall feeling goes to the summary, and help is
-# kept apart from recognition.
+# kept apart from recognition. His second picks went to v5 on 9 of 10, with two notes: a milestone
+# lost its weight, and a Sunday of nerves lost its emotional core. So a bullet keeps what the work
+# closes out and how long it ran, a feeling that is why they recorded the day leads the card, and
+# the summary grows into the fuller record the report writer reads, since reports read v5's
+# shorter notes less accurately than v4's.
 # ---------------------------------------------------------------------------
 
 _WRITING_V5 = """
@@ -277,19 +281,27 @@ again. What got done or went wrong, what came of it, who helped, what they decid
 - The first bullet is what mattered most: a milestone, a result, a decision, or what went
   wrong. The rest follow in the order they happened. How it was done gets one bullet at
   most, and a plan they stated ("going to write it up") is worth keeping.
+- Keep what gives a bullet its weight later: what the work closes out and how long it ran
+  ("Closed out the billing migration, carried since spring."), and why it was done ("for the
+  Q3 audit").
 - Start with a past-tense verb ("Fixed…", "Wrote the runbook…"), or with whoever or whatever
   the bullet is about when that isn't them ("Dana caught…", "The cutover…"). Never start with
   "You". Each is one sentence ending in a full stop.
-- A feeling about one thing can ride in that thing's bullet ("Relieved the cutover went
-  cleanly."). How the day felt overall goes in the summary, never in a bullet.
+- When how they feel is why they recorded the day (nerves before a big meeting, relief after
+  a launch), the first bullet carries it, tied to its cause ("Nervous about Thursday's demo,
+  with the load test still failing."). Otherwise a feeling about one thing rides in that
+  thing's bullet ("Relieved the cutover went cleanly."), and how the day felt overall goes in
+  the summary.
 The shape, from other people's notches (never reuse their wording):
   "Shipped the auth migration to staging."
   "Dana caught a race in the retry path."
   "Planning stalled without the pre-reads."
 
 SUMMARY
-One or two sentences, at most 35 words, in the same voice: the day's main story, with the
-feeling folded in if they said one. The same facts as the takeaways and nothing beyond them.
+Two or three sentences, at most 50 words, in the same voice. The card shows the takeaways; the
+summary is the fuller record the report writer reads later, so carry what the takeaways had no
+room for: who did what, what the work closes out, and how the day felt, if they said. Nothing
+beyond what the entry says.
 
 TAGS
 Handles for finding this notch later: kinds of work, systems, the shape of the day
@@ -315,7 +327,7 @@ LABEL_SYSTEM_V5 = LABEL_PREAMBLE + _WRITING_V5 + IMPACT_AND_RECOGNITION
 LABEL_ENTRY_V5 = _closed({
     "takeaways": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 3,
                   "description": "One to three bullets, each at most 12 words. See TAKEAWAYS."},
-    "summary": {"type": "string", "description": "One or two sentences, at most 35 words. See SUMMARY."},
+    "summary": {"type": "string", "description": "Two or three sentences, at most 50 words. See SUMMARY."},
     "tags": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 4,
              "description": "One to four hashtag-style handles. See TAGS."},
     "impact_note": _WRITTEN["impact_note"],
