@@ -62,7 +62,7 @@ MAX_TAKEAWAYS = 3
 MAX_TOKENS = 1500  # labels plus two short prose fields
 VOCABULARY_LIMIT = 100  # most-used first, so a long history cannot crowd the prompt
 CHECK_SECONDS = 20  # the most a check may add; past it the notch keeps its writing unchecked
-CHECK_TOKENS = 800  # a handful of fixes, each one item long
+CHECK_TOKENS = 1200  # every item fixed and quoted, the summary included; a cut-off answer is left unchecked
 
 
 def _copied_sections(tail):
