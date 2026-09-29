@@ -3,7 +3,7 @@
  "variant": "r2",
  "notches": "v4",
  "model": "deepseek/deepseek-v4-pro-0813",
- "run_at": "2026-09-29T17:26:32Z",
+ "run_at": "2026-09-29T18:26:12Z",
  "results": {
   "week": {
    "facts": {
@@ -55,54 +55,54 @@
     "momentum_granularity": "day",
     "eyebrow": "Weekly report · Sep 21 – 27"
    },
-   "headline": "Checkout shipped after a rough start",
-   "lede": "The week opened with a double-charge incident on your change, and closed with the Checkout Revamp fully live. In between, you fixed the bug, ran a clean postmortem, and got recognized for it.",
-   "body": "Monday was bad. You took checkout to fifty percent and support started flagging double charges within the hour: the idempotency key was regenerating on retry, so processor timeouts charged forty-one customers twice. You rolled back within twenty minutes and finance refunded everyone the same day, but you went to bed feeling sick about it, even after Priya stayed late to walk the retry path with you line by line.\n\nThe next morning you wrote the fix, generating the key once per checkout attempt and persisting it, plus the timeout test that should have existed in the first place. Priya caught one more case, where the retry happens after the session refreshes. The postmortem on Wednesday stayed blameless and produced three action items, including a five-percent canary before any big jump.\n\nThursday you went back to fifty percent, watched the retry dashboard for two hours with no double charges and conversion up a bit, then shipped the whole revamp at a hundred percent after six months of work. Grace called out your retry fix in the launch channel, which meant a lot after Tuesday. You wrapped the week fixing a flaky timezone test in the ledger suite, and spent Sunday finishing the diagrams and migration section for Tuesday's architecture review, still anxious about Marcus pushing back on the slow event-replay approach.",
+   "headline": "The revamp finally shipped",
+   "lede": "A week that started with a serious incident ended with the Checkout Revamp fully live, 6 months of work out the door, and your retry fix called out by Grace in the launch channel.",
+   "body": "You shipped the Checkout Revamp at 100% with conversion up on the new flow and no double charges. That's the headline, and it came a day after a 50% rollout caused 41 double charges from a regenerated idempotency key on retry. You rolled back within 20 minutes and finance refunded everyone the same day. Grace recognized your retry fix specifically in the launch channel, which after the rough product meeting on Tuesday, meant a lot.\n\nThe pattern this week was recovering with real craft. You wrote the fix so the key is generated once per checkout attempt and persisted, and added the processor-timeout test that should have existed from the start. Priya caught the session-refresh case, and you ran a blameless postmortem that produced three action items, two of which, your timeout test and the retry dashboard, were done before the week ended. You ended with the flaky timezone test in the ledger suite fixed.\n\nYou spent Sunday, against your own better judgment, preparing Tuesday's architecture review of the event-sourced ledger. The diagrams and migration section are done. Marcus may push on replaying events to rebuild balances because it's slow, and you don't have a good answer yet. Writing it down helped a bit.",
    "themes": [
-    "incident",
+    "incident-recovery",
     "rollout",
     "postmortem",
     "retry-fix",
-    "flaky-tests"
+    "design-review"
    ],
    "highlights": [
     {
-     "title": "Rolled back in twenty minutes",
-     "detail": "Forty-one double charges, all refunded same day",
-     "kind": "note",
-     "source_entry_ids": [
-      "2D8DD513-9F63-5BEE-BF30-9E8EA4319DF7"
-     ]
-    },
-    {
-     "title": "Retry bug fixed",
-     "detail": "Key generated once per attempt, Priya caught the session-refresh case",
-     "kind": "collaboration",
-     "source_entry_ids": [
-      "E668BC36-ABFB-5473-BEC6-7B042E85C6B9"
-     ]
-    },
-    {
      "title": "Checkout Revamp shipped",
-     "detail": "Six months of work fully out, no double charges",
+     "detail": "100% live, no double charges, conversion up.",
      "kind": "milestone",
      "source_entry_ids": [
       "528B7003-78A2-596E-98DD-BD3C8A5A1E60"
      ]
     },
     {
-     "title": "Grace called out the fix",
-     "detail": "Public recognition in the launch channel",
+     "title": "Retry fix recognized",
+     "detail": "Grace called it out in the launch channel.",
      "kind": "note",
      "source_entry_ids": [
       "528B7003-78A2-596E-98DD-BD3C8A5A1E60"
      ]
+    },
+    {
+     "title": "Incident recovered fast",
+     "detail": "Rolled back in 20 minutes, 41 refunded same day.",
+     "kind": "shipped",
+     "source_entry_ids": [
+      "2D8DD513-9F63-5BEE-BF30-9E8EA4319DF7"
+     ]
+    },
+    {
+     "title": "Postmortem and action items",
+     "detail": "Blameless, three items, your test already done.",
+     "kind": "collaboration",
+     "source_entry_ids": [
+      "4B4CAA9C-A033-5B07-A6EB-4849CBE17AB6"
+     ]
     }
    ],
    "spend": {
-    "cost": 0.003688,
-    "prompt_tokens": 3769,
-    "completion_tokens": 713,
+    "cost": 0.004103,
+    "prompt_tokens": 4160,
+    "completion_tokens": 699,
     "calls": 1
    }
   },
@@ -258,44 +258,44 @@
     "momentum_granularity": "day",
     "eyebrow": "Monthly report · September 2026"
    },
-   "headline": "Checkout shipped, recon finally clean",
-   "lede": "The checkout revamp went all the way to 100 percent after a rough fifty-percent rollout, and the ledger recon job you'd carried since June ran clean. In between, a lot of pairing, interviews, and people work.",
-   "body": "The month opened with you and Dev settling the checkout rollout plan, then the ledger finally gave way: you traced the nightly mismatches to a UTC-versus-Pacific cutoff and pushed a fix that took the dry run from 340 mismatches to twelve. Within a week the job ran clean seven nights straight, and Hannah confirmed finance is dropping the manual month-end spreadsheet, saving about two days every close. A project on your plate since June, tied off.\n\nThe checkout rollout was the harder story. You shipped to five percent cleanly, but fifty percent caused forty-one double charges from a regenerated idempotency key. You rolled back within twenty minutes, finance refunded everyone the same day, and you wrote the fix the next morning, Priya catching the session-refresh case. The postmortem stayed blameless and produced three action items, yours already done. By Thursday the revamp shipped at full rollout with no double charges and conversion up, and Grace called out the retry fix in the launch channel — six months of work fully out.\n\nAround it you did quiet, valuable work: paired Leo through the double-entry checks until he wrote the test first on his own, profiled the merchant dashboard transactions page down from about 1.8 seconds to 600 milliseconds at p95, and got the retry-logic ownership settled with Marcus. Tuesday's architecture review on the event-sourced ledger is weighing on you — you know the event-replay rebuild is slow and you don't have the answer yet.",
+   "headline": "Landed two long-running projects",
+   "lede": "You finished two projects you'd carried since mid-year: the ledger reconciliation, now running clean, and the checkout revamp, shipped to 100% after a double-charge incident you rolled back in 20 minutes and fixed the next day.",
+   "body": "The recon job ran clean for 7 straight nights with zero mismatches, and Hannah from finance said they'll drop the manual month-end spreadsheet, saving her team about 2 days every close. The checkout revamp went fully out after 6 months of work, conversion up a bit on the new flow, with Grace calling out your retry fix in the launch channel. Separately, you cut the merchant dashboard transactions page from about 1.8s to about 600ms at p95, which Dev called huge for merchant NPS.\n\nThe double charges hit hard, 41 customers, and you said it plainly: it was your change, and you felt sick about it. You rolled back within 20 minutes, wrote the fix so the key is generated once per checkout attempt and persisted, and ran a blameless postmortem that produced 3 action items, one of which was already done. You also got defensive in a product meeting about pausing the rollout and said so yourself. The throughline is that you traced root causes under pressure and kept naming the hard parts instead of smoothing them over.\n\nYou flagged earlier that interviews drain you more than coding, and the Q4 hiring work stayed careful anyway: detailed feedback written right after each interview. Looking ahead, you're anxious about Tuesday's architecture review and the slow event-replay approach to rebuilding balances, and you don't have an answer for it yet. This month's pattern, finding the root cause and testing the fix, is exactly what that review will want to see.",
    "themes": [
-    "rollout",
-    "reconciliation",
-    "pairing",
-    "postmortem",
-    "hiring"
+    "root-cause-fixing",
+    "shipping-with-rollback",
+    "testing-the-fix",
+    "honest-postmortems",
+    "mentoring"
    ],
    "highlights": [
     {
-     "title": "Recon ran clean",
-     "detail": "Zero mismatches, finance drops the manual spreadsheet",
+     "title": "Recon job runs clean",
+     "detail": "Zero mismatches 7 nights; finance drops manual spreadsheet",
      "kind": "milestone",
      "source_entry_ids": [
       "D4C24760-D481-5841-BEAC-31A37F456731"
      ]
     },
     {
-     "title": "Checkout shipped at 100%",
-     "detail": "Six months of work, Grace called out the retry fix",
+     "title": "Checkout revamp at 100%",
+     "detail": "Conversion up on new flow; Grace recognized your retry fix",
      "kind": "milestone",
      "source_entry_ids": [
       "528B7003-78A2-596E-98DD-BD3C8A5A1E60"
      ]
     },
     {
-     "title": "Ledger mismatch found",
-     "detail": "UTC cutoff bug, dry run 340 down to 12",
+     "title": "Root-caused the recon mismatches",
+     "detail": "Timezone cutoff bug; dry run 340 to 12",
      "kind": "shipped",
      "source_entry_ids": [
       "E99BD6AA-4860-53C6-8A11-FFF3416A1297"
      ]
     },
     {
-     "title": "Dashboard three times faster",
-     "detail": "Transactions page p95 from 1.8s to 600ms",
+     "title": "Dashboard latency cut",
+     "detail": "1.8s to 600ms p95; Dev called it huge",
      "kind": "shipped",
      "source_entry_ids": [
       "577137E3-4E95-5182-BA92-469A7123D18C"
@@ -303,9 +303,9 @@
     }
    ],
    "spend": {
-    "cost": 0.005766,
-    "prompt_tokens": 6605,
-    "completion_tokens": 744,
+    "cost": 0.005468,
+    "prompt_tokens": 6996,
+    "completion_tokens": 765,
     "calls": 1
    }
   }
