@@ -1,7 +1,7 @@
 """
 prompts.py — every prompt the server sends a model, as named variants.
 
-Remote config names the variant each kind runs (`prompts: {analyze, takeaways, reports}`),
+Remote config names the variant each kind runs (`prompts: {analyze, takeaways, reports, check}`),
 and every response carries it back as `prompt_version`, so a device knows which words
 wrote its notch or report. A NEW prompt is a server deploy that adds a variant here
 (classification scored with eval_categories.py first, writing read against the variant it
@@ -535,6 +535,65 @@ _CARD["detail"]["description"] = "At most 10 words, sentence case: the result, o
 
 
 # ---------------------------------------------------------------------------
+# check c1: a second, narrow call that holds a notch's writing to its transcript.
+# On evals/writing_set.json every writing variant, v4 included, put one to four facts wrong in
+# ten notches: an action credited to the wrong person, a plan told as done, a return told as a
+# pause, the wrong weekday, a mistake made anonymous. Rewording the writing moved those slips
+# around rather than removing them, so c1 reads the finished writing beside the transcript and
+# returns only fixes, which analysis._checked applies. Tags, mood, project and categories are
+# not its business.
+# ---------------------------------------------------------------------------
+
+CHECK_SYSTEM_C1 = """You check one notch for Notch, a voice-first career impact tracker.
+
+A person spoke about their work day, and another model wrote the notch from the transcript:
+takeaways they scan later on a card, a summary, who recognized the work, and its impact. The
+notch feeds the reports they bring to a review, so a wrong fact in it can end up in front of
+their manager.
+
+Read the transcript, then each item of the notch. Fix an item only where it states something
+the transcript contradicts or never says. A paraphrase is fine; a new or wrong fact is not.
+Look hardest at:
+- Who did what: an action credited to the wrong person ("Merged the fix" when Sam merged
+  it), or a decision about someone else told as if it were about them.
+- How far it got: a plan told as done, done told as planned, staging told as shipped.
+- Direction and amount: a return told as a pause, up told as down, a number or percentage
+  that isn't the one they said. Their spoken numbers as digits are right ('twelve' is '12').
+- When: a weekday or an order of events the transcript doesn't give.
+- Whose mistake: a mistake they called their own made anonymous ("a config bug" when they
+  said it was their change) or put on someone else.
+- Voice: an "I", "me" or "my" meant for them. The notch speaks to them as "you": "my
+  change" is "your change".
+- Recognition: a name under "recognized by" that nobody in the transcript supports.
+  Recognition is someone telling them the work mattered: praise, thanks, a call-out, or
+  telling them what it changed for them or their team. Someone helping, reviewing or staying
+  late with them is not recognition.
+
+Everything else stays as written: the wording, what was left out, the tone, and the notch's
+style (short sentences, digits, no em dashes). Change only the words that are wrong, and fix
+each item on its own evidence: a fix to one item is no reason to touch another. Never add a
+fact, never improve an item, and never guess: when the transcript can't settle it, leave the
+item. Most notches need no fix, and then the answer is no fixes.
+
+Each fix names the item as it is labelled, gives the whole item corrected and about as long as
+it was, and quotes the transcript's own words that show the item is wrong. If no words in the
+transcript show it, it is not a fix, and a different word for the same thing is not wrong. To
+clear "recognized by" or "impact", give an empty text."""
+
+CHECK_ITEMS = ("takeaway 1", "takeaway 2", "takeaway 3", "summary", "recognized by", "impact")
+CHECK_ENTRY_C1 = _closed({
+    "fixes": {"type": "array", "maxItems": len(CHECK_ITEMS), "description": "Empty when the notch needs no fix.",
+              "items": _closed({
+                  "item": {"type": "string", "enum": list(CHECK_ITEMS), "description": "The item fixed, as labelled."},
+                  "text": {"type": "string", "description": (
+                      "The whole item, corrected. Empty only to clear 'recognized by' or 'impact'.")},
+                  "quote": {"type": "string", "description": (
+                      "The transcript's own words that show the item is wrong, copied exactly.")},
+              })},
+})
+
+
+# ---------------------------------------------------------------------------
 # The variants remote config may name.
 # ---------------------------------------------------------------------------
 
@@ -553,18 +612,28 @@ class ReportPrompts:
     schema: dict
 
 
+@dataclass(frozen=True)
+class CheckPrompts:
+    """A check on a notch's writing: its system prompt, and the schema of the fixes it returns."""
+    system: str
+    schema: dict
+
+
 LABEL_V4 = LabelPrompts(LABEL_SYSTEM_V4, LABEL_ENTRY, LABEL_FALLBACK_V4, LABEL_ENTRY_FALLBACK)
 # v5 classifies exactly as v4 does (categories, mood, project): only the writing call is new.
 LABEL_V5 = LabelPrompts(LABEL_SYSTEM_V5, LABEL_ENTRY_V5, LABEL_FALLBACK_V4, LABEL_ENTRY_FALLBACK)
 REPORT_R1 = ReportPrompts(REPORT_SYSTEM_R1, WRITE_REPORT)
 REPORT_R2 = ReportPrompts(REPORT_SYSTEM_R2, WRITE_REPORT_R2)
+CHECK_C1 = CheckPrompts(CHECK_SYSTEM_C1, CHECK_ENTRY_C1)
 
 # kind -> {variant name: prompts}. takeaways is the writing half of analyze, so it runs label variants.
+# check runs after the writing of both; "off" runs none.
 # remote_config.DEFAULTS names which one runs; adding a variant here switches nothing on.
 VARIANTS = {
     "analyze": {"v4": LABEL_V4, "v5": LABEL_V5},
     "takeaways": {"v4": LABEL_V4, "v5": LABEL_V5},
     "reports": {"r1": REPORT_R1, "r2": REPORT_R2},
+    "check": {"off": None, "c1": CHECK_C1},
 }
 
 

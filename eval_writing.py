@@ -3,8 +3,11 @@ eval_writing.py — the words a person reads, run on a fixed set so prompt varia
 
     python eval_writing.py notches v4 --all          # every notch in the set (a report needs them all)
     python eval_writing.py notches v5                # only the notches marked compare
+    python eval_writing.py notches v5+c1 --all       # v5's writing, held to the transcript by check c1
     python eval_writing.py reports r1 r2 --notches v4
     python eval_writing.py show --notches v4 v5 --reports r1 r2
+    python eval_writing.py show --notches v5 v5+c1   # each fix the check made, and what it cost
+    python eval_writing.py check c1 --notches v5     # the check alone, over v5's cached writing
 
 evals/writing_set.json is one fictional person's September: fifteen spoken notches, the projects
 and tag vocabulary the device sends beside each, and two report periods (a week inside the month).
@@ -32,6 +35,7 @@ import json
 import os
 import re
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 from notch_api import analysis, prompts, v2, wire_v2
@@ -87,17 +91,25 @@ def _spend(usage):
 
 
 def analyze(client, notch, data, variant):
-    """One notch through POST /v2/analyze's call, on remote config's defaults."""
+    """
+    One notch through POST /v2/analyze's call, on remote config's defaults. A variant named
+    "v5+c1" is v5's writing held to the transcript by check c1; its record keeps the fixes.
+    """
+    name, _, check = variant.partition("+")
     bound, usage = _bound(client)
+    started = time.monotonic()
     result = analysis.analyze_text(
         bound, notch["transcript"], project_names=data["project_names"], vocabulary=data["vocabulary"],
-        labels=prompts.variant("analyze", variant), classifier=DEFAULTS["classifier"],
+        labels=prompts.variant("analyze", name), classifier=DEFAULTS["classifier"],
         max_tokens=DEFAULTS["chat"]["max_tokens_analyze"], thresholds=DEFAULTS["category_thresholds"],
-        project_confidence=DEFAULTS["project_confidence"])
+        project_confidence=DEFAULTS["project_confidence"], check=prompts.variant("check", check or "off"))
+    seconds = round(time.monotonic() - started, 1)
     written = {k: result[k] for k in ("summary", "takeaways", "tags", "mood", "impact_note", "acknowledged_by",
                                      "categories", "classified_by")}
     written["project_name"] = v2.canonical_project(result["project_name"], data["project_names"])
-    return written | {"spend": _spend(usage)}
+    if check:
+        written["checked"] = result["checked"]
+    return written | {"spend": _spend(usage), "seconds": seconds}
 
 
 def report_body(period, data, notched):
@@ -140,6 +152,32 @@ def run_notches(client, data, variant, *, every, refresh, workers):
             "classifier": DEFAULTS["classifier"], "run_at": _now(), "results": {s: results[s] for s in order}}
     _write("notches", variant, body)
     return body, len(todo)
+
+
+def run_check(client, data, check, *, notches, workers):
+    """
+    Check `check` alone over a cached notches run: the same writing every time, so two checks
+    read byte-identical input, and the slips a writing run happened to make stay put.
+    """
+    labelled = _read("notches", notches)
+    if not labelled:
+        raise SystemExit(f"Run `python eval_writing.py notches {notches} --all` first.")
+    wanted = [n for n in data["notches"] if n["slug"] in labelled["results"]]
+
+    def one(notch):
+        w = labelled["results"][notch["slug"]]
+        bound, usage = _bound(client)
+        started = time.monotonic()
+        out = analysis._checked(bound, notch["transcript"], {k: w[k] for k in (
+            "summary", "takeaways", "tags", "impact_note", "acknowledged_by")}, prompts.variant("check", check))
+        return {"checked": out["checked"], "spend": _spend(usage), "seconds": round(time.monotonic() - started, 1)}
+
+    with ThreadPoolExecutor(workers) as pool:
+        results = dict(zip([n["slug"] for n in wanted], pool.map(one, wanted)))
+    body = {"kind": "checks", "variant": check, "notches": notches, "model": DEFAULTS["models"]["chat"],
+            "run_at": _now(), "results": results}
+    _write("checks", f"{check}-on-{notches}", body)
+    return body, len(results)
 
 
 def run_reports(client, data, variant, *, notches, refresh):
@@ -202,6 +240,10 @@ def show_notches(data, runs):
             lines.append(f"      summary [{_words(w['summary'])}w]: {w['summary']}")
             if w["impact_note"] or w["acknowledged_by"]:
                 lines.append(f"      impact: {w['impact_note']} · recognized by: {w['acknowledged_by']}")
+            if "checked" in w and w["checked"] is None:
+                lines.append("      the check could not run")
+            for f in w.get("checked") or []:
+                lines.append(f"      checked {f['item']}: {f['was']!r} -> {f['text']!r} (quoting {f['quote']!r})")
             found = _stock(" ".join([w["summary"], *w["takeaways"]]))
             if found:
                 lines.append(f"      stock phrases: {', '.join(found)}")
@@ -215,11 +257,31 @@ def show_notches(data, runs):
         near = sum(w["mood"] in expect[s]["also_ok"] for s, w in zip(slugs, rs))
         you = sum(t.lower().startswith(("you ", "you'", "i ")) for w in rs for t in w["takeaways"])
         cost = sum(w["spend"]["cost"] for w in rs)
+        timed = [w["seconds"] for w in rs if "seconds" in w]
+        checks = [w["checked"] for w in rs if "checked" in w]
         lines.append(f"  [{r['variant']}] {len(rs)} notches · mood {exact} as expected, {near} near"
                      f" · takeaways {len(took)} ({sum(took) / max(len(took), 1):.1f}w avg, max {max(took, default=0)}w,"
                      f" {you} start 'You'/'I') · summary {sum(_words(w['summary']) for w in rs) / max(len(rs), 1):.1f}w avg"
                      f" · tags {sum(len(w['tags']) for w in rs) / max(len(rs), 1):.1f} avg"
-                     f" · ${cost:.4f} over {sum(w['spend']['calls'] for w in rs)} calls")
+                     f" · ${cost:.4f} over {sum(w['spend']['calls'] for w in rs)} calls"
+                     + (f" · {sum(timed) / len(timed):.1f}s a notch" if timed else "")
+                     + (f" · checked: {sum(len(c or []) for c in checks)} fixes on {sum(bool(c) for c in checks)}"
+                        f" notches, {checks.count(None)} unchecked" if checks else ""))
+    return lines
+
+
+def show_check(body):
+    """A check run's fixes, notch by notch, then what it cost and how long it took."""
+    lines, rs = [f"check {body['variant']} on {body['notches']}'s writing"], body["results"]
+    for slug, r in rs.items():
+        if r["checked"] is None:
+            lines.append(f"  {slug}: the check could not run")
+        for f in r["checked"] or []:
+            lines.append(f"  {slug} · {f['item']}: {f['was']!r} -> {f['text']!r} (quoting {f['quote']!r})")
+    seconds = [r["seconds"] for r in rs.values()]
+    lines.append(f"  {sum(len(r['checked'] or []) for r in rs.values())} fixes on {sum(bool(r['checked']) for r in rs.values())}"
+                 f" of {len(rs)} notches · ${sum(r['spend']['cost'] for r in rs.values()):.4f}"
+                 f" · {sum(seconds) / max(len(seconds), 1):.1f}s a check (max {max(seconds, default=0)}s)")
     return lines
 
 
@@ -266,6 +328,10 @@ def main(argv=None):
     r.add_argument("variants", nargs="+")
     r.add_argument("--notches", default="v4", help="the label variant whose notches the reports read")
     r.add_argument("--refresh", action="store_true")
+    c = sub.add_parser("check", help="run a check alone over a cached notches run, and print its fixes")
+    c.add_argument("variants", nargs="+")
+    c.add_argument("--notches", default="v5", help="the cached notches run whose writing is checked")
+    c.add_argument("--workers", type=int, default=4)
     s = sub.add_parser("show", help="print cached runs")
     s.add_argument("--notches", nargs="*", default=[])
     s.add_argument("--reports", nargs="*", default=[])
@@ -289,6 +355,10 @@ def main(argv=None):
                 body, called = run_notches(client, data, variant, every=args.all, refresh=args.refresh,
                                            workers=args.workers)
                 spent = sum(w["spend"]["cost"] for w in body["results"].values())
+            elif args.command == "check":
+                body, called = run_check(client, data, variant, notches=args.notches, workers=args.workers)
+                spent = sum(w["spend"]["cost"] for w in body["results"].values())
+                print("\n".join(show_check(body)))
             else:
                 body, called = run_reports(client, data, variant, notches=args.notches, refresh=args.refresh)
                 spent = sum(d["spend"]["cost"] for d in body["results"].values())

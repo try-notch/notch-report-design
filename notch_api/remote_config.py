@@ -36,7 +36,8 @@ DEFAULTS = {
                "classifier": "typesafe/jev-1.13"},
     # "chat": the chat model classifies. "jev": Jev does, with the chat model as its fallback.
     "classifier": "chat",
-    "prompts": {"analyze": "v4", "takeaways": "v4", "reports": "r1"},
+    # "check": the call that holds a notch's writing to its transcript (analysis._checked); "off" skips it.
+    "prompts": {"analyze": "v4", "takeaways": "v4", "reports": "r1", "check": "off"},
     "category_thresholds": dict(env.CATEGORY_THRESHOLDS),
     "project_confidence": env.PROJECT_CONFIDENCE,
     # Sent on every chat call. zdr and data_collection are fixed: validation refuses anything else.

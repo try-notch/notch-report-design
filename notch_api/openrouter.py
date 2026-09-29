@@ -307,6 +307,18 @@ class OpenRouterClient:
         view._models, view._provider = dict(models or {}), dict(provider) if provider else None
         return view
 
+    def within(self, seconds):
+        """
+        This client with at most `seconds` more to spend: the sooner of its own deadline
+        and one `seconds` from now. Everything else (pool, key, usage, models, provider)
+        is shared, so what the calls cost is still counted where the request counts it.
+        """
+        view = object.__new__(OpenRouterClient)
+        view.__dict__.update(self.__dict__)
+        own = self._deadline
+        view._deadline = own if own is not None and own.remaining() <= seconds else Deadline(seconds)
+        return view
+
     @classmethod
     def from_env(cls):
         """Build from OPENROUTER_API_KEY (config.py has already loaded .env)."""

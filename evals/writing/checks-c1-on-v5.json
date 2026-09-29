@@ -1,0 +1,199 @@
+{
+ "kind": "checks",
+ "variant": "c1",
+ "notches": "v5",
+ "model": "deepseek/deepseek-v4-pro-0813",
+ "run_at": "2026-09-29T19:31:29Z",
+ "results": {
+  "sep01-planning": {
+   "checked": [
+    {
+     "item": "summary",
+     "text": "Month started with planning: you and Dev went through the checkout revamp rollout, phasing 5%, 25%, 50%, then everyone a few days apart, with the kill switch tested before each step. He wanted to go faster, you pushed back, and you met in the middle. You also blocked out the recon work because the mismatches are driving finance nuts. Feels like a good, busy month ahead.",
+     "quote": "blocked out the recon work for this week",
+     "was": "Month started with planning: you and Dev went through the checkout revamp rollout, phasing 5%, 25%, 50%, then everyone a few days apart, with the kill switch tested before each step. He wanted to go faster, you pushed back, and you met in the middle. You also blocked out the ledger recon work because the mismatches are driving finance nuts. Feels like a good, busy month ahead."
+    }
+   ],
+   "spend": {
+    "cost": 0.001059,
+    "prompt_tokens": 1318,
+    "completion_tokens": 166,
+    "calls": 1
+   },
+   "seconds": 3.5
+  },
+  "sep03-recon-cutoff": {
+   "checked": [],
+   "spend": {
+    "cost": 0.000678,
+    "prompt_tokens": 1414,
+    "completion_tokens": 46,
+    "calls": 1
+   },
+   "seconds": 1.7
+  },
+  "sep08-pairing-leo": {
+   "checked": [],
+   "spend": {
+    "cost": 0.000608,
+    "prompt_tokens": 1235,
+    "completion_tokens": 46,
+    "calls": 1
+   },
+   "seconds": 2.0
+  },
+  "sep09-recon-clean": {
+   "checked": [],
+   "spend": {
+    "cost": 0.000653,
+    "prompt_tokens": 1349,
+    "completion_tokens": 46,
+    "calls": 1
+   },
+   "seconds": 1.7
+  },
+  "sep10-interviews": {
+   "checked": [],
+   "spend": {
+    "cost": 0.000574,
+    "prompt_tokens": 1251,
+    "completion_tokens": 46,
+    "calls": 1
+   },
+   "seconds": 1.1
+  },
+  "sep14-quiet": {
+   "checked": [],
+   "spend": {
+    "cost": 0.000578,
+    "prompt_tokens": 1262,
+    "completion_tokens": 46,
+    "calls": 1
+   },
+   "seconds": 1.1
+  },
+  "sep16-people": {
+   "checked": [
+    {
+     "item": "takeaway 2",
+     "text": "You agreed your team owns retry logic until the new client ships.",
+     "quote": "We didn't fully agree but we got to, my team owns it until the new client ships, then it moves to them",
+     "was": "Marcus agreed your team owns retry logic until the new client ships."
+    },
+    {
+     "item": "takeaway 3",
+     "text": "Interview debrief ended as a hire on the second backend candidate.",
+     "quote": "Then an interview debrief for the backend role, we're a hire on the second candidate.",
+     "was": "Hired on the second backend candidate."
+    }
+   ],
+   "spend": {
+    "cost": 0.001129,
+    "prompt_tokens": 1428,
+    "completion_tokens": 185,
+    "calls": 1
+   },
+   "seconds": 3.1
+  },
+  "sep17-five-percent": {
+   "checked": [],
+   "spend": {
+    "cost": 0.000584,
+    "prompt_tokens": 1276,
+    "completion_tokens": 46,
+    "calls": 1
+   },
+   "seconds": 1.1
+  },
+  "sep18-dashboard-p95": {
+   "checked": [],
+   "spend": {
+    "cost": 0.000625,
+    "prompt_tokens": 1381,
+    "completion_tokens": 46,
+    "calls": 1
+   },
+   "seconds": 1.1
+  },
+  "sep21-double-charge": {
+   "checked": [],
+   "spend": {
+    "cost": 0.000624,
+    "prompt_tokens": 1379,
+    "completion_tokens": 46,
+    "calls": 1
+   },
+   "seconds": 1.5
+  },
+  "sep22-fix-and-meeting": {
+   "checked": [
+    {
+     "item": "takeaway 3",
+     "text": "Rollout back to 50% Thursday if the postmortem goes okay.",
+     "quote": "We landed on going back to fifty percent Thursday if the postmortem goes okay.",
+     "was": "Rollout paused to 50% Thursday if the postmortem goes okay."
+    },
+    {
+     "item": "summary",
+     "text": "Wrote the retry bug fix, generating the key once per checkout attempt and persisting it, plus a test that simulates the processor timeout. Priya reviewed and caught a retry-after-session-refresh case, which you fixed together. The afternoon meeting with Grace and product got tense; you got defensive, and the team landed on going back to 50% Thursday if the postmortem goes okay. Drained by the end.",
+     "quote": "We landed on going back to fifty percent Thursday if the postmortem goes okay.",
+     "was": "Wrote the retry bug fix, generating the key once per checkout attempt and persisting it, plus a test that simulates the processor timeout. Priya reviewed and caught a retry-after-session-refresh case, which you fixed together. The afternoon meeting with Grace and product got tense; you got defensive, and the team landed on returning to 50% Thursday if the postmortem goes okay. Drained by the end."
+    }
+   ],
+   "spend": {
+    "cost": 0.001228,
+    "prompt_tokens": 1379,
+    "completion_tokens": 219,
+    "calls": 1
+   },
+   "seconds": 3.1
+  },
+  "sep23-postmortem": {
+   "checked": [],
+   "spend": {
+    "cost": 0.000584,
+    "prompt_tokens": 1276,
+    "completion_tokens": 46,
+    "calls": 1
+   },
+   "seconds": 1.1
+  },
+  "sep24-checkout-100": {
+   "checked": [],
+   "spend": {
+    "cost": 0.000588,
+    "prompt_tokens": 1288,
+    "completion_tokens": 46,
+    "calls": 1
+   },
+   "seconds": 1.7
+  },
+  "sep25-short": {
+   "checked": [],
+   "spend": {
+    "cost": 0.00052,
+    "prompt_tokens": 1114,
+    "completion_tokens": 46,
+    "calls": 1
+   },
+   "seconds": 1.6
+  },
+  "sep27-sunday-nerves": {
+   "checked": [
+    {
+     "item": "takeaway 2",
+     "text": "Finished the diagrams; migration section is solid.",
+     "quote": "I finished the diagrams today, finally, and I think the migration section is solid.",
+     "was": "Finished the diagrams and the migration section."
+    }
+   ],
+   "spend": {
+    "cost": 0.000741,
+    "prompt_tokens": 1286,
+    "completion_tokens": 90,
+    "calls": 1
+   },
+   "seconds": 1.9
+  }
+ }
+}
