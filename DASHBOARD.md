@@ -36,20 +36,65 @@ NOTCH_DASH_GATE_SECRET_FILE=/path/to/gate-secret \
 across every account, from the /v2 server's meter database (`notch_dash/usage.py`, `GET /api/usage`).
 Counts, timings, costs and codes only, the same rule as the rest of the page: the meter holds no
 notch content, Notch Cloud's ciphertext is never read, and an account shows only as the first
-eight characters of its Supabase id. Days are UTC, the meter's own.
+eight characters of its Supabase id.
 
-- **Today and the last 7 days:** active accounts, notches, reports, spend against the global
-  daily cap, cost per notch, the share of calls that failed, and accounts at the daily notch cap.
-- **Day by day** (14 days): active accounts, notches, write-ups, reports, failures, calls refused
-  by the daily limit, spend.
-- **Processing time:** each call's p50, p95 and slowest, on the server (start to finish).
-- **Problems:** failed and refused calls by code, with how many accounts they touched, and what is
-  in flight now (and past its deadline).
-- **Accounts:** total, new this week, Notch Cloud on, blocked, deleted; the top accounts today by
-  spend against the per-account cap.
-- **Models, zero data retention, app versions.**
+It was first drawn against a synthetic fleet. After the first week of real use (2 accounts, 5
+notches) it was rebuilt around what small, real numbers need:
 
-A read is cached for ten seconds; the page refreshes every fifteen.
+- **Needs a look:** the page's one banner, worded by the server (`attention`). It lists a
+  zero-retention verdict of `miss` or `unknown`, a call past its deadline and still in flight, calls
+  that failed or were turned away in the last 24 hours, spend at 80% of the daily cap, and the API
+  not answering. A quiet page means none of those.
+- **Last 24 hours:** accounts that made a call, notches, spend, and how many calls didn't go
+  through. It is 24 hours on the clock, not the UTC day, which is empty every evening in America.
+  An account here is one that made a call: `active_days` records a config fetch by day, with no time.
+- **Last 7 days:** active accounts, notches, spend, and what a notch costs: its transcription and
+  write-up, with reports priced apart.
+- **Day by day** (UTC days, the meter's own): from the first day in the last 14 with any use to
+  today, so a gap shows and two weeks of zeros don't.
+- **Problems:** one table from three sources. *Failed*: the call started and didn't finish.
+  *Refused*: the meter stopped it (a limit, a reused key). *Turned away*: it was answered before
+  check-and-start (no token, an app too old, a switch that is off, unreadable audio), so it has no
+  usage row and no account; the server counts those in `refusals` (see below). Requests to paths
+  that don't exist are one count under the table, never rows.
+- **Models:** one row a model, with the providers that served it and how often.
+- **Accounts:** total, new this week, how many have ever made a notch; then each account active
+  this week with its last sighting, build, notches, spend and today's notches against the cap.
+- **App versions:** each account once, on the newest build it ran on its latest day.
+- **Zero data retention:** the audit's verdicts as a state (confirmed, unverified, not zero
+  retention), then by kind of call.
+- **Server:** whether the API answers `/healthz` (asked every 15 s while the page is open), the
+  config in force with its note and prompts, the limits and when the UTC day turns over in the
+  viewer's zone, and OpenRouter's own count of the key's spend. The link to `/harness` shows only
+  where that page has a source of its own; on the VPS it has none.
+- **Speed and cost:** each kind of call by the prompt version that wrote it: calls, failed, the
+  typical (median) and slowest time, the mean cost and tokens. A p95 shows from 20 calls.
+- **Recent calls:** the last 30, one row each: when, the call, the account's prefix, its size, how
+  long it took, cost, tokens, who served it, the prompt version, the build and the outcome. Never the
+  Idempotency-Key or the body's HMAC.
+
+**The answers the meter never saw.** `notch_api/refusals.py` counts every non-2xx answer that left
+no usage row, under the hour, the route's template (or `unmatched`), the status and the code: no
+user, no path, no header. `privacy.Guard` hands it each finished request; it counts in memory and
+writes the batch to the meter's `refusals` table every five seconds and at shutdown, so a flood of
+bad requests costs one small write, not one each. Rows older than 90 days are dropped.
+
+**Formats on this page.** Money has four decimals under a dollar ("$0.0026": a notch costs a
+quarter of a cent) and two from a dollar up; zero is "$0". Sums are rounded once, at the end.
+Instants are the viewer's local time; "ago" is measured from the server's clock.
+
+**The document** (`GET /api/usage`) carries `v` (2). The page shows "The dashboard was updated.
+Reload the page." when it meets another version. A meter from before `refusals` existed is read as
+having none.
+
+A read is cached for ten seconds; the page refreshes every fifteen, and stops while its tab is hidden.
+
+**Check it end to end:** `.venv/bin/python e2e/dash_usage.py` serves the API and the dashboard on
+local ports with the fake models, plays the first week of real use and every kind of refusal, and
+checks `/api/usage` and the rendered page (in headless Chrome, under the page's own
+Content-Security-Policy) against what the phones were answered. It writes `report.html` with
+screenshots to `e2e/runs/`; `--serve` leaves the page up, on that week's numbers, to look at.
+`tests/test_dash_usage_e2e.py` runs its first pass inside the suite.
 
 ## Environment
 
@@ -667,6 +712,8 @@ For each check, the backend evaluates the rules top to bottom, and the first mat
 | `snapshot.py` | `build(src, db, now, started=None) -> dict`: the checks, the status rules and thresholds, overall, the panels, phases and notes. Pure: given the sources' cached values and the DB rows, it returns the contract. Each check is a public function (`server_check`, `tunnel_check`, `gate_check`, `worker_check`, `openrouter_check`, `phone_check`, `overall`) so the rules are tested directly. |
 | `app.py` | `create_app(settings, *, http=None, run=subprocess.run, clock=time.time, start=True)`. It serves `GET /` (index.html), `GET /static/{app.js,style.css}` (an allow-list), `GET /api/snapshot`, the header middleware and the Host check. `Sources` wires every Tail and Poller, answers each `sources.*` entry, and reads the record once per snapshot (snapshots are built one at a time). The lifespan starts and stops the threads. |
 | `static/index.html`, `static/app.js`, `static/style.css` | The page (see below). |
+| `usage.py` | `read(path, now) -> dict`: the usage page's document, from the meter database opened read-only, cached for ten seconds. |
+| `static/usage.html`, `static/usage.js` | The usage page. It shares `style.css`; its own rules sit under `.usage`, `.mini`, `.list` and `.pair`. |
 
 **Tests:** `tests/test_dash_logs.py` (also `Tail` and `Poller`), `tests/test_dash_probes.py`, `tests/test_dash_snapshot.py`, `tests/test_dash_app.py` and `tests/test_metrics.py`.
 - They use the `db_path` / `add_entry` / `capture` / `clock` fixtures from conftest.py.

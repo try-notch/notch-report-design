@@ -224,8 +224,10 @@ the `meter` volume read-only, and publishes 4130 on the host's 127.0.0.1 only. C
 5. `cd ~/notch && sudo docker compose up -d --build`, and open `https://dash.trynotch.xyz`.
 
 On the VPS the dashboard's Mac sources (the /v1 database, Caddy's log, the tunnel, the phone)
-are switched off in `dash.env`; it shows the API's health and OpenRouter key spend. Panels over
-the meter database are the next step for it.
+are switched off in `compose.yaml`, so `/harness` has nothing of its own to show there and the
+usage page does not link to it. `/` is the usage page (DASHBOARD.md › The usage page): the fleet
+from the meter database, with the API's health and OpenRouter's count of the key's spend in its
+Server card.
 
 ## 7. Operating it
 

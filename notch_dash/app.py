@@ -5,6 +5,10 @@ GET only, from an allowed Host on this Mac only, every response uncached under a
 page, `static/` its two other files (an allow-list), `api/snapshot` the document. Slow
 sources are kept current by background threads (Sources.start); a snapshot request reads
 their caches and runs one bounded read of the record.
+
+The usage page (`/usage`, `api/usage`) is usage.py's read of the meter plus Sources.server():
+whether the API answers, and OpenRouter's own count of the spend. Each page keeps only its own
+probes awake, so the usage page left open asks /healthz every 15 seconds, not every 2.
 """
 
 import ipaddress
@@ -47,7 +51,7 @@ class Sources:
 
     def __init__(self, settings, *, http, run, clock):
         s, self.settings, self.clock = settings, settings, clock
-        self.watched_at = self.db_read_at = self.db_error = None
+        self.watched_at = self.usage_watched_at = self.db_read_at = self.db_error = None
         self.caddy_parser, self.server_parser, self.tunnel_parser = logs.CaddyLog(), logs.ServerLog(), logs.TunnelLog()
 
         def tail(path, parse, interval, maxlen=None, part=lambda item: None):
@@ -61,6 +65,7 @@ class Sources:
         self.server_log = tail(s.server_log, self.server_parser.feed, 2, LOG_KEEP, type)
         self.tunnel_log = tail(s.tunnel_log, self.tunnel_parser.feed, 5, LOG_KEEP)
         self.health = poll(lambda: probes.local_health(http, s.notch_port), 2, 10, True)  # the server logs each one
+        self.api = poll(lambda: probes.local_health(http, s.notch_port), 15, 60, True)   # the usage page's, slower
         self.cloudflared = poll(lambda: probes.cloudflared(http, s.tunnel_metrics), 5, 30)
         self.e2e = poll(lambda: probes.end_to_end(http, self.host(clock()), s.gate_secret_file), 15, 60, True)
         self.integrity = poll(lambda: probes.gate_integrity(http, self.host(clock())), 60, 300, True)
@@ -79,24 +84,33 @@ class Sources:
             "openrouter": (self.openrouter, s.openrouter_key, "openrouter.ai/api/v1/key"),
             "device": (self.device, s.device, "xcrun devicectl"),
         }
-        # (step, interval, watched_only): the local server, every configured source, and last the gate,
-        # which needs the host the tunnel sources give
-        self.jobs = [(self.health.refresh, self.health.interval, True)]
-        for source, configured, _ in self.named.values():
+        # (step, interval, who must be watching, or None for always): the local server, every configured
+        # source, the gate, which needs the host the tunnel sources give, and last the usage page's own
+        # health check. OpenRouter's spend is on both pages, so either keeps it awake.
+        self.jobs = [(self.health.refresh, self.health.interval, self.watching)]
+        for key, (source, configured, _) in self.named.items():
             if isinstance(source, Tail) and configured:
-                self.jobs.append((source.tick, source.interval, False))
+                self.jobs.append((source.tick, source.interval, None))
             elif isinstance(source, Poller) and configured:
-                self.jobs.append((source.refresh, source.interval, source.watched_only))
-        self.jobs.append((self.integrity.refresh, self.integrity.interval, True))
+                watched = self.anyone_watching if key == "openrouter" else self.watching
+                self.jobs.append((source.refresh, source.interval, watched if source.watched_only else None))
+        self.jobs.append((self.integrity.refresh, self.integrity.interval, self.watching))
+        if s.meter_db:
+            self.jobs.append((self.api.refresh, self.api.interval, self.usage_watching))
         self._stop, self._building = threading.Event(), threading.Lock()
 
     def watching(self):
         return self.watched_at is not None and self.clock() - self.watched_at < WATCHED_S
 
+    def usage_watching(self):
+        return self.usage_watched_at is not None and self.clock() - self.usage_watched_at < WATCHED_S
+
+    def anyone_watching(self):
+        return self.watching() or self.usage_watching()
+
     def start(self):
-        for step, interval, watched_only in self.jobs:
-            threading.Thread(target=run, args=(step, interval, self._stop, self.watching if watched_only else None),
-                             daemon=True).start()
+        for step, interval, watched in self.jobs:
+            threading.Thread(target=run, args=(step, interval, self._stop, watched), daemon=True).start()
 
     def stop(self):
         self._stop.set()
@@ -139,6 +153,24 @@ class Sources:
         with self._building:  # one at a time: sources.db reads what this snapshot's read_db left
             self.watched_at, started = now, time.perf_counter()
             return snapshot.build(self, self.read_db(now), now, started)
+
+    def server(self, now):
+        """
+        The usage page's view of this stack, and the mark that someone is watching it:
+        `api` (does /healthz answer; None until the first check), `openrouter` (the key's
+        own spend, None without a key or before the first read) and `harness` (whether
+        /harness has anything of its own to show here).
+        """
+        self.usage_watched_at, s = now, self.settings
+        health, spend = self.api.current(now), self.openrouter.current(now) if s.openrouter_key else None
+        return {
+            "api": health and {"ok": health["error"] is None, "latency_ms": health["latency_ms"],
+                               "error": health["error"], "checked_at": snapshot._r3(self.api.read_at)},
+            "openrouter": spend and {k: spend[k] for k in ("today_usd", "week_usd", "total_usd", "limit_usd",
+                                                             "remaining_usd")} | {
+                "checked_at": snapshot._r3(self.openrouter.read_at)},
+            "harness": bool(s.db or s.caddy_log or s.server_log or s.tunnel_log),
+        }
 
 
 def _basename(path):
@@ -213,7 +245,14 @@ def create_app(settings, *, http=None, run=subprocess.run, clock=time.time, star
     def api_usage():
         if not settings.meter_db:
             return JSONResponse({"error": "Not set up. Set NOTCH_DASH_METER_DB to the /v2 meter database."})
-        return JSONResponse(usage.read(settings.meter_db, clock()))
+        now = clock()
+        document = usage.read(settings.meter_db, now)
+        if "error" in document:
+            return JSONResponse(document)
+        server = sources.server(now)
+        down = [] if not server["api"] or server["api"]["ok"] else [
+            {"level": "critical", "text": f"The API isn’t answering on this server: {server['api']['error']}."}]
+        return JSONResponse(document | {"server": server, "attention": down + document["attention"]})
 
     @app.api_route("/static/{name}", methods=["GET", "HEAD"])
     def static(name: str):

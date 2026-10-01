@@ -280,9 +280,14 @@ class V2:
         s, cfg, entry = self.s, caller.cfg, request_entry(request.scope)
         versions = {"config_version": cfg.version, "prompt_version": prompt_version,
                     "app_version": caller.client.app_version, "platform": caller.client.platform}
-        started = await run_in_threadpool(
-            s.meter.start, user_id=caller.user_id, kind=kind, key=key, body_hmac=body_hmac,
-            deadline_seconds=cfg["deadlines"][kind] + GRACE, config=cfg, sizes=sizes, versions=versions)
+        try:
+            started = await run_in_threadpool(
+                s.meter.start, user_id=caller.user_id, kind=kind, key=key, body_hmac=body_hmac,
+                deadline_seconds=cfg["deadlines"][kind] + GRACE, config=cfg, sizes=sizes, versions=versions)
+        except Refusal as refusal:
+            entry["metered"] = getattr(refusal, "metered", False)   # its `rejected` row, if start() wrote one
+            raise
+        entry["metered"] = True   # from here on the call has a usage row: refusals.py leaves it alone
         entry["attempt"] = started.attempt
         usage, outcome, extras = Usage(), {"ok": False, "code": None}, {}
         try:
