@@ -123,8 +123,8 @@ touches a prompt, a model call or audio.
 
 ## With a key
 
-Put keys in `.env` at the repository's root. It is ignored, and the server and the demo both
-load it.
+Put keys in `.env` at the repository's root: `cp .env.example .env` starts one with both names
+in it. It is ignored, and the server and the demo both load it.
 
 - `OPENROUTER_API_KEY` is for the server, `e2e/`, `notch_api.seed`, `notch_api.eval_categories`,
   `eval_writing.py` and `eval_moods.py`.
