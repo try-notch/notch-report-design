@@ -18,12 +18,14 @@ per-entry on the cheap tier without anyone caring how long the output is.
 
 TWO LAYERS OF TAG, AND WHY
 --------------------------
-FIXED tags come from a closed set of five. Every chart, percentage and
-week-over-week comparison in a report keys off them. A closed set is what makes
-"collaboration went from 0% to 80%" a claim that holds up across weeks.
+FIXED tags come from the `tags` table — a closed catalog of name + explanation.
+Every chart, percentage and week-over-week comparison in a report keys off them.
+A closed catalog is what makes "this tag went from 0% to 80%" a claim that holds
+up across weeks. The prompt never hardcodes the names; tagger.py loads the table
+and slips it in, so a new row is enough to add a tag.
 
 AUTO tags are open vocabulary — whatever the entry is actually about. They feed
-search and surface themes five buckets can't hold, and they are never counted
+search and surface themes the catalog can't hold, and they are never counted
 into a chart, because an open vocabulary drifts: 'flaky tests' this week and
 'test flakiness' next week are one idea stored as two strings.
 
@@ -52,7 +54,7 @@ import anthropic
 
 import db
 from llm import MissingAPIKeyError, load_api_key
-from prompt_variants import VARIANTS
+from prompt_variants import build_prompt
 
 # Which prompt variant ships. Changing this is a product change — re-run the
 # eval before you do, and record the result in TAGGING_EVAL.md.
@@ -79,14 +81,19 @@ MAX_AUTO_TAGS = 6
 WORKERS = 4
 
 
-# The system prompt is the winner of the eval in TAGGING_EVAL.md, imported
-# rather than pasted so the shipped prompt cannot drift from the measured one.
-# Re-run  python eval_tags.py --run v4_stacking  to reproduce its score.
-SYSTEM_PROMPT = VARIANTS[WINNING_VARIANT]
+# The system prompt is assembled at call time: application rules from the
+# winning variant, tag names and explanations from the `tags` table. Re-run
+# python eval_tags.py --run v4_stacking  to reproduce its score.
+# SYSTEM_PROMPT is not a constant — the catalog can grow without editing this file.
 
 
-def _tool_schema(project_names):
+def _tool_schema(project_names, tag_names):
     """The forced shape of the response. One flat object per entry."""
+    if not tag_names:
+        raise ValueError(
+            "The tags table is empty. Run  python seed_db.py  first, or insert "
+            "at least one tag name and explanation."
+        )
     if project_names:
         project_hint = (
             "Exact name of the matching project, copied verbatim from this list: "
@@ -101,10 +108,10 @@ def _tool_schema(project_names):
         "properties": {
             "tags": {
                 "type": "array",
-                "items": {"type": "string", "enum": db.TAGS},
+                "items": {"type": "string", "enum": tag_names},
                 "description": (
-                    "Every tag from the closed list that applies. At least one. "
-                    "Usually one or two."
+                    "Every tag from the closed catalog that applies. At least one. "
+                    "Usually one or two. Use the exact names from the catalog."
                 ),
             },
             "auto_tags": {
@@ -149,21 +156,22 @@ def _tool_schema(project_names):
     }
 
 
-def _clean_auto_tags(raw):
+def _clean_auto_tags(raw, tag_names):
     """
     Normalize the open vocabulary as far as we can without a real eval.
 
-    Lowercase, de-duplicate, drop anything that's just a fixed tag under another
+    Lowercase, de-duplicate, drop anything that's just a catalog tag under another
     name, and cap the count. This does NOT solve drift — 'flaky tests' vs 'test
     flakiness' still slip through as two tags — which is exactly why auto tags
     stay out of charts until there's an eval saying they're consistent enough.
     """
+    catalog = set(tag_names)
     seen, cleaned = set(), []
     for tag in raw:
         if not isinstance(tag, str):
             continue
         tag = tag.strip().strip(".,").lower()
-        if not tag or tag in db.TAGS or tag in seen:
+        if not tag or tag in catalog or tag in seen:
             continue
         seen.add(tag)
         cleaned.append(tag)
@@ -178,6 +186,10 @@ def tag_entry(client, raw_text, project_names, vocabulary=(), system_prompt=None
     Forced tool use, same as llm.py — the model has to fill in our fields, so
     there is no free text to parse.
 
+    `tags` is the catalog from db.get_tags(). Names go into the tool enum;
+    names and explanations are slipped into the system prompt. If omitted,
+    the catalog is loaded from the database.
+
     `vocabulary` is the auto tags this user already has. Tagging one entry in
     isolation is what produces drift — the model has no way to know it said
     'migration documentation' last week, so it coins 'migration docs' today.
@@ -185,6 +197,9 @@ def tag_entry(client, raw_text, project_names, vocabulary=(), system_prompt=None
     than the system prompt because it changes per call, which keeps the system
     prompt static and cacheable.
 
+    `system_prompt` defaults to the winning variant with this catalog injected,
+    and exists so eval_tags.py can run a variant against the same entries
+    without editing this file.
     `system_prompt` defaults to SYSTEM_PROMPT and exists so eval_tags.py can run
     a variant against the same entries without editing this file.
 
@@ -192,10 +207,16 @@ def tag_entry(client, raw_text, project_names, vocabulary=(), system_prompt=None
     eval_confidence.py raises it to sample the answer DISTRIBUTION instead;
     nothing in the product path should ever pass this.
     """
+    if tags is None:
+        tags = db.get_tags()
+    tag_names = [t["name"] for t in tags]
+    if system_prompt is None:
+        system_prompt = build_prompt(tags, WINNING_VARIANT)
+
     tool = {
         "name": "label_entry",
         "description": "Extract the structured labels for one Notch journal entry.",
-        "input_schema": _tool_schema(project_names),
+        "input_schema": _tool_schema(project_names, tag_names),
     }
 
     message = f"Label this entry:\n\n{raw_text}"
@@ -209,7 +230,7 @@ def tag_entry(client, raw_text, project_names, vocabulary=(), system_prompt=None
     response = client.messages.create(
         model=MODEL,
         max_tokens=MAX_TOKENS,
-        system=system_prompt or SYSTEM_PROMPT,
+        system=system_prompt,
         # Labelling wants the single most likely answer, not a sample from the
         # distribution. It also makes the eval reproducible — at the default
         # temperature the same prompt scores differently run to run, which makes
@@ -223,8 +244,8 @@ def tag_entry(client, raw_text, project_names, vocabulary=(), system_prompt=None
     for block in response.content:
         if block.type == "tool_use":
             result = dict(block.input)
-            result["auto_tags"] = _clean_auto_tags(result.get("auto_tags", []))
-            result["tags"] = [t for t in result.get("tags", []) if t in db.TAGS]
+            result["auto_tags"] = _clean_auto_tags(result.get("auto_tags", []), tag_names)
+            result["tags"] = [t for t in result.get("tags", []) if t in tag_names]
             return result, response.usage
 
     # Only reachable if the API contract changes underneath us.
@@ -250,7 +271,7 @@ def _select(entries, overwrite, limit):
     return entries[:limit] if limit else entries
 
 
-def backfill(entries, project_names, existing_vocabulary=(), dry_run=False):
+def backfill(entries, project_names, existing_vocabulary=(), dry_run=False, tags=None):
     """
     Tag every entry, printing results in order as they land.
 
@@ -263,6 +284,8 @@ def backfill(entries, project_names, existing_vocabulary=(), dry_run=False):
 
     Returns the list of (entry, result) pairs.
     """
+    if tags is None:
+        tags = db.get_tags()
     client = _client()
     results = []
     vocabulary = set(existing_vocabulary)
@@ -275,7 +298,8 @@ def backfill(entries, project_names, existing_vocabulary=(), dry_run=False):
             seen = sorted(vocabulary)
 
             def work(entry, seen=seen):
-                return tag_entry(client, entry["raw_text"], project_names, seen)
+                return tag_entry(client, entry["raw_text"], project_names, seen,
+                                 tags=tags)
 
             # executor.map preserves input order, so output reads chronologically
             # even though the calls finish out of order.
@@ -316,6 +340,7 @@ def main():
     try:
         all_entries = db.get_all_entries()
         project_names = db.list_project_names()
+        tags = db.get_tags()
         load_api_key()
     except (db.NoDatabaseError, MissingAPIKeyError) as exc:
         print(f"\n  {RED}✗{RESET}  {exc}\n")
@@ -328,10 +353,12 @@ def main():
               f"Use {DIM}--overwrite{RESET} to re-tag them.\n")
         return 0
 
+    catalog = ", ".join(t["name"] for t in tags)
     print()
     print("  Notch · capture-time tagging")
     print("  " + "─" * 56)
     print(f"  {len(entries)} entries · {MODEL} · prompt {WINNING_VARIANT}")
+    print(f"  catalog: {catalog}")
     print()
 
     # Seed the vocabulary from entries that are already tagged, so a partial
@@ -339,7 +366,7 @@ def main():
     existing_vocabulary = {t for e in all_entries for t in e["auto_tags"]}
 
     try:
-        results = backfill(entries, project_names, existing_vocabulary)
+        results = backfill(entries, project_names, existing_vocabulary, tags=tags)
     except MissingAPIKeyError as exc:
         print(f"\n  {RED}✗{RESET}  {exc}\n")
         return 1
