@@ -271,18 +271,22 @@ class Stack:
                                        sleep=lambda seconds: None)
         self.api_port, self.dash_port = free_port(), free_port()
         self.api_app = Counted(create_app(services=self.services, v1=False))
-        env = compose_dash_environment() | {
-            "NOTCH_DASH_BIND": "127.0.0.1", "NOTCH_DASH_PORT": str(self.dash_port), "NOTCH_PORT": str(self.api_port),
-            "NOTCH_DASH_METER_DB": self.meter_db, "NOTCH_METRICS": os.path.join(work, "metrics.jsonl"),
-            "OPENROUTER_API_KEY": "e2e-not-a-key"}
-        self.settings = Settings.from_env(env)
-        self.dash_app = dash_app.create_app(self.settings, http=httpx.Client(transport=httpx.MockTransport(
-            self._outbound)), clock=self.clock)
+        self.dash_app = self.dashboard(self.dash_port)
+        self.settings = self.dash_app.state.sources.settings
         self.api = f"http://127.0.0.1:{self.api_port}"
         self.dash = f"http://127.0.0.1:{self.dash_port}"
         self.http = httpx.Client(timeout=30)
         self.ledger, self.keys = [], []
         self._real = httpx.HTTPTransport()
+
+    def dashboard(self, port, start=True):
+        """notch_dash for `port`, from compose.yaml's environment; `start=False` leaves its probes asleep."""
+        settings = Settings.from_env(compose_dash_environment() | {
+            "NOTCH_DASH_BIND": "127.0.0.1", "NOTCH_DASH_PORT": str(port), "NOTCH_PORT": str(self.api_port),
+            "NOTCH_DASH_METER_DB": self.meter_db, "NOTCH_METRICS": os.path.join(self.work, "metrics.jsonl"),
+            "OPENROUTER_API_KEY": "e2e-not-a-key"})
+        return dash_app.create_app(settings, http=httpx.Client(transport=httpx.MockTransport(self._outbound)),
+                                   clock=self.clock, start=start)
 
     def _outbound(self, request):
         """The dashboard's own HTTP: OpenRouter's key endpoint is canned, the API's /healthz is real."""
@@ -349,10 +353,10 @@ class Stack:
 
     # -- reading the dashboard --------------------------------------------------
 
-    def usage(self):
+    def usage(self, dash=None):
         """GET /api/usage, past the dashboard's ten-second cache."""
         self.clock.advance(11)
-        response = self.http.get(self.dash + "/api/usage")
+        response = self.http.get((dash or self.dash) + "/api/usage")
         response.raise_for_status()
         return response.json(), response.text
 
@@ -573,14 +577,19 @@ def run(out, *, browser=None, serve=False, quick=False):
     with server_logs(os.path.join(work, "server.log")), Served(s.api_app, s.api_port) as api, \
             Served(s.dash_app, s.dash_port):
         # -- an empty meter ------------------------------------------------------
+        # On a second dashboard whose probes never start. The one under test must first be watched on
+        # Oct 1: a probe that ran now, on Sep 27's clock, would not be due again for a real minute.
         print("an empty meter")
-        empty, _ = s.usage()
-        check("F27", "an empty meter answers a whole document", empty.get("v") == 2 and empty["recent"] == []
-              and empty["daily"] == [] and empty["week"]["notch_cost_usd"] is None, empty.get("error"))
-        if browser:
-            dom, logged = chrome(browser, s.dash + "/", width=1280, height=1600, dom=True)
-            check("F27", "the page renders an empty meter",
-                  "Nothing yet" in dom and "Reading…" not in part(dom, "fresh"), part(dom, "fresh"))
+        port = free_port()
+        with Served(s.dashboard(port, start=False), port):
+            quiet = f"http://127.0.0.1:{port}"
+            empty, _ = s.usage(quiet)
+            check("F27", "an empty meter answers a whole document", empty.get("v") == 2 and empty["recent"] == []
+                  and empty["daily"] == [] and empty["week"]["notch_cost_usd"] is None, empty.get("error"))
+            if browser:
+                dom, logged = chrome(browser, quiet + "/", width=1280, height=1600, dom=True)
+                check("F27", "the page renders an empty meter",
+                      "Nothing yet" in dom and "Reading…" not in part(dom, "fresh"), part(dom, "fresh"))
 
         # -- the first week, then trouble ------------------------------------------
         print("five days of use, then every refusal")
