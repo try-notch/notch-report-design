@@ -7,7 +7,8 @@ a pull request.
 
 The rules that are easiest to break:
 
-- **Start from `ios-contract`, not `main`.** It is the integration branch and what is deployed.
+- **Start from `main`, and open pull requests against it.** `ios-contract` is an older branch
+  kept so links work; nothing lands there.
 - **The phone holds the record; the server keeps no readable content.** Do not add a table,
   column, file or log line to `notch_api/` that holds what a person said or an edit they made.
   `tests/test_no_content_at_rest.py` is the check.

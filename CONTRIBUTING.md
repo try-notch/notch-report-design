@@ -33,15 +33,16 @@ Its **auto tags** are the contract's `tags`, which the app shows as hashtags.
 
 ## Branches and pull requests
 
-- **`ios-contract` is the integration branch, and it is what is deployed.** `main` trails it (as
-  of 2026-10-01). Start from `ios-contract` and open the pull request against it:
+- **`main` is the one branch.** Start from it and open the pull request against it:
 
   ```bash
   git fetch origin
-  git switch -c <your-branch> origin/ios-contract
+  git switch -c <your-branch> origin/main
   ```
 
-  A branch that was cut from `main` catches up with `git merge origin/ios-contract`.
+  `ios-contract` was the integration branch until 2026-10-01. It is kept so old links work, and
+  nothing lands there. A branch cut from it, or from an older `main`, catches up with
+  `git merge origin/main`.
 - Branches so far are one per change (`claude/dash-usage`, `claude/eval-moods`). Each was merged
   with a merge commit whose subject starts "Merge the".
 - **There is no CI here.** The pull request says which of the checks below you ran and what they
@@ -61,7 +62,6 @@ on the `PATH` (the speech tests and the end-to-end runs call the real ones).
 sudo apt-get update && sudo apt-get install -y git python3-venv ffmpeg   # Ubuntu, WSL2 included
 git clone https://github.com/try-notch/notch-report-design.git
 cd notch-report-design
-git switch ios-contract
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 ```
