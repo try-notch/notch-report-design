@@ -60,10 +60,11 @@ and resets the profile and settings to their defaults. The user row stays.
 .venv/bin/python eval_writing.py show --notches v4 v5 --reports r1 r2   # the writing variants, side by side
 .venv/bin/python eval_writing.py check c1 --notches v5                 # the check alone, over v5's writing
 .venv/bin/python -m notch_api.admin config show  # /v2's remote config (NOTCH_METER_DB)
-.venv/bin/python -m pytest -q                    # offline, ~25 s
+.venv/bin/python -m pytest -q                    # offline, ~35 s
 .venv/bin/python e2e/run_e2e.py --offline        # the /v1 flow on fakes, ~2 s
 .venv/bin/python e2e/run_e2e.py                  # the /v1 flow on real models, ~2.5 min, ~$0.06
 .venv/bin/python e2e/check_route.py              # the writing check through /v2, real models, ~30 s, ~$0.01
+.venv/bin/python e2e/dash_usage.py               # /v2, the meter and the usage page in a browser, on fakes, ~20 s
 ```
 
 ## /v2: what it serves
