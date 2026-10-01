@@ -22,7 +22,8 @@ stateless routes in v2.py and cloud.py, which keep no content. /v1 stores transc
 and audio, so it is the development harness only: `v1=False` (NOTCH_ENV=prod) leaves it
 unmounted and creates no content database or audio directory at all. Either way the
 app is wrapped in privacy.Guard, the outermost layer: one scrubbed log line per request,
-and the 500 for any exception answered there, never by uvicorn.
+and the 500 for any exception answered there, never by uvicorn. With /v2 mounted, Guard
+also hands each request to refusals.py, which counts the refused ones no usage row covers.
 
 AUTH IS STUBBED: `Bearer dev` is the dev user and anything else is 401. No route
 takes a user id; every query is scoped to the token's user, and a record owned by
@@ -157,6 +158,7 @@ def create_app(*, db_path=config.DB_PATH, audio_dir=config.AUDIO_DIR, client=Non
             log.info("resumed %d unfinished job(s)", app.state.runner.resume_pending())
         if services is not None:
             log.info("expired %d unsettled call(s)", services.meter.expire_stale())
+            services.refusals.start()
         try:
             yield
         finally:
@@ -372,4 +374,4 @@ def create_app(*, db_path=config.DB_PATH, audio_dir=config.AUDIO_DIR, client=Non
     if services is not None:
         from . import v2
         v2.register(app, services)
-    return privacy.Guard(app)
+    return privacy.Guard(app, on_request=services.refusals.note if services is not None else None)

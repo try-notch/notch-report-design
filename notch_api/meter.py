@@ -21,6 +21,11 @@ COUNTING. Quotas count distinct Idempotency-Keys per UTC day among `ok` rows and
 `in_flight` ones, so a retried call is charged once and a failed one not at all. Cost
 counts every attempt, whatever its outcome, because every attempt was paid for.
 
+ANSWERS THE METER NEVER SAW. A call refused before check-and-start (no token, an app
+too old, a feature switched off, audio that will not decode) has no `usage_events` row.
+`refusals` counts those by hour, route template, status and code, with no user, so the
+dashboard can show them; refusals.py batches the writes.
+
 Connections are opened per operation with isolation_level=None, so a transaction is
 exactly the BEGIN IMMEDIATE ... COMMIT written here (Python's default would open a
 deferred one of its own before the first write). Instants are Unix seconds; days are
@@ -38,6 +43,7 @@ from .wire_v2 import Refusal
 
 KINDS = ("transcribe", "analyze", "takeaways", "reports")
 RATE_LIMIT_RETRY_SECONDS = 5
+REFUSALS_KEPT_SECONDS = 90 * 86400   # hourly rows older than this go as new ones are written
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS accounts (
@@ -89,6 +95,17 @@ CREATE TABLE IF NOT EXISTS usage_events (
 CREATE INDEX IF NOT EXISTS usage_by_user_day ON usage_events (user_id, day);
 CREATE INDEX IF NOT EXISTS usage_by_key ON usage_events (user_id, kind, request_key);
 CREATE INDEX IF NOT EXISTS usage_in_flight ON usage_events (status, deadline_at);
+CREATE INDEX IF NOT EXISTS usage_by_day ON usage_events (day);   -- the dashboard reads by window
+
+CREATE TABLE IF NOT EXISTS refusals (                -- non-2xx answers with no usage_events row; no user
+    hour    INTEGER NOT NULL,                         -- the UTC hour it was answered in, as Unix seconds
+    route   TEXT NOT NULL,                            -- the route's template, or 'unmatched': never a path
+    status  INTEGER NOT NULL,
+    code    TEXT NOT NULL,                            -- the error envelope's code
+    calls   INTEGER NOT NULL DEFAULT 0,
+    last_at REAL NOT NULL,
+    PRIMARY KEY (hour, route, status, code)
+) STRICT;
 
 CREATE TABLE IF NOT EXISTS daily_spend (             -- no user: it survives account deletion
     day      TEXT NOT NULL,
@@ -199,10 +216,16 @@ class Meter:
             conn.close()
 
     @contextmanager
-    def _write(self):
-        """One BEGIN IMMEDIATE transaction: committed if the block returns, rolled back if it raises."""
+    def _write(self, *, durable=True):
+        """
+        One BEGIN IMMEDIATE transaction: committed if the block returns, rolled back if it raises.
+        `durable=False` commits without waiting for the disk (synchronous NORMAL): for counts a
+        crash may lose, never for metering or Notch Cloud.
+        """
         conn = connect(self.path)
         try:
+            if not durable:
+                conn.execute("PRAGMA synchronous = NORMAL")
             conn.execute("BEGIN IMMEDIATE")
             try:
                 yield conn
@@ -305,6 +328,8 @@ class Meter:
           `attempts_per_hour` times in the last hour), 429 rate_limited (`max_in_flight`
           calls running), 429 quota_exceeded (the kind's backstop of distinct keys today,
           or the account's cost today).
+        A Refusal that left a `rejected` row carries `metered = True`, so the route does not
+        count it again in `refusals`.
         """
         now = self.clock()
         day = utc_day(now)
@@ -322,6 +347,7 @@ class Meter:
             if refusal.code != "account_gone":  # a deleted account gets no rows back
                 self._insert(conn, user_id, kind, key, body_hmac, None, "rejected", refusal.code, day, now, now,
                              sizes, versions, finished=now)
+                refusal.metered = True
         raise refusal  # after the rejected row has committed
 
     def _check(self, conn, user_id, kind, key, body_hmac, config, now, day, midnight, resets_at):
@@ -424,6 +450,26 @@ class Meter:
             return conn.execute("UPDATE usage_events SET status = 'failed', error_code = 'abandoned', "
                                 "finished_at = deadline_at WHERE status = 'in_flight' AND deadline_at <= ?",
                                 (now,)).rowcount
+
+    # -- answers with no usage row ------------------------------------------------
+
+    def count_refusals(self, counts):
+        """
+        refusals.py's batch, {(hour, route, status, code): (calls, last_at)}, added to the
+        hourly rows in one transaction, which also drops rows past REFUSALS_KEPT_SECONDS.
+        Not a durable write: these are counts for the dashboard, and the disk sync a metering
+        row needs would be paid for nothing.
+        """
+        if not counts:
+            return
+        rows = [(hour, route, status, code, calls, last_at)
+                for (hour, route, status, code), (calls, last_at) in counts.items()]
+        with self._write(durable=False) as conn:
+            conn.executemany(
+                "INSERT INTO refusals (hour, route, status, code, calls, last_at) VALUES (?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT (hour, route, status, code) DO UPDATE SET calls = calls + excluded.calls, "
+                "last_at = max(last_at, excluded.last_at)", rows)
+            conn.execute("DELETE FROM refusals WHERE hour < ?", (int(self.clock() - REFUSALS_KEPT_SECONDS),))
 
     # -- Notch Cloud ------------------------------------------------------------
 
