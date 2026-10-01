@@ -1,0 +1,434 @@
+{
+ "kind": "notches",
+ "variant": "v4",
+ "model": "deepseek/deepseek-v4-pro-0813",
+ "classifier": "chat",
+ "run_at": "2026-09-29T17:13:26Z",
+ "results": {
+  "sep01-planning": {
+   "summary": "You and Dev planned the checkout revamp rollout: five, then twenty-five, then fifty percent, then everyone, a few days apart, with the kill switch tested before each step. You also blocked out recon work for the week because the mismatches are bothering finance.",
+   "takeaways": [
+    "You and Dev settled on a staged checkout revamp rollout with the kill switch tested before each step",
+    "You pushed back on a faster rollout and met him in the middle",
+    "You blocked out time for the ledger reconciliation mismatches"
+   ],
+   "tags": [
+    "planning",
+    "rollout",
+    "pairing"
+   ],
+   "mood": "up",
+   "impact_note": null,
+   "acknowledged_by": null,
+   "categories": [
+    "collaboration",
+    "leadership"
+   ],
+   "classified_by": "llm",
+   "project_name": "Checkout Revamp",
+   "spend": {
+    "cost": 0.003543,
+    "prompt_tokens": 3574,
+    "completion_tokens": 518,
+    "calls": 2
+   }
+  },
+  "sep03-recon-cutoff": {
+   "summary": "You traced the nightly ledger mismatches to a timezone cutoff bug: settlement files cut off at midnight UTC but you were bucketing by Pacific time, so late-evening items landed on the wrong day. You pushed a fix to staging and the dry run dropped from 340 mismatches to 12.",
+   "takeaways": [
+    "Found the ledger mismatch root cause: a UTC vs Pacific timezone cutoff bug.",
+    "Pushed a fix to staging; the dry run went from 340 mismatches to 12.",
+    "Still have 12 unexplained mismatches to chase down tomorrow."
+   ],
+   "tags": [
+    "recon",
+    "debugging",
+    "shipped"
+   ],
+   "mood": "up",
+   "impact_note": "dry run mismatches dropped from 340 to 12",
+   "acknowledged_by": null,
+   "categories": [
+    "wins",
+    "growth",
+    "challenges"
+   ],
+   "classified_by": "llm",
+   "project_name": "Ledger Reconciliation",
+   "spend": {
+    "cost": 0.003831,
+    "prompt_tokens": 3772,
+    "completion_tokens": 553,
+    "calls": 2
+   }
+  },
+  "sep08-pairing-leo": {
+   "summary": "You paired with Leo most of the afternoon on his first real PR to the ledger service, walking through the double-entry checks until he wrote the test first on his own. Morning was code reviews for the checkout team. A normal, good day.",
+   "takeaways": [
+    "Leo wrote his first test on his own without being prompted",
+    "You covered the double-entry checks in the ledger service posting logic",
+    "Morning was spent on checkout team code reviews"
+   ],
+   "tags": [
+    "pairing",
+    "code-review",
+    "mentoring"
+   ],
+   "mood": "up",
+   "impact_note": null,
+   "acknowledged_by": null,
+   "categories": [
+    "wins",
+    "collaboration",
+    "growth"
+   ],
+   "classified_by": "llm",
+   "project_name": "Ledger Reconciliation",
+   "spend": {
+    "cost": 0.003433,
+    "prompt_tokens": 3532,
+    "completion_tokens": 481,
+    "calls": 2
+   }
+  },
+  "sep09-recon-clean": {
+   "summary": "The recon job ran clean for seven straight nights with zero mismatches. You also fixed the twelve mismatches from last week — refunds issued across the cutoff — and Hannah from finance confirmed the team will stop their manual month-end spreadsheet.",
+   "takeaways": [
+    "The recon job ran clean all week with zero mismatches",
+    "Finance is dropping their manual month-end spreadsheet, saving about two days each close",
+    "You tied off a project that's been on your plate since June"
+   ],
+   "tags": [
+    "shipped",
+    "rollout",
+    "reconciliation"
+   ],
+   "mood": "up",
+   "impact_note": "saves finance about two days every month-end close",
+   "acknowledged_by": "Hannah",
+   "categories": [
+    "wins",
+    "growth"
+   ],
+   "classified_by": "llm",
+   "project_name": "Ledger Reconciliation",
+   "spend": {
+    "cost": 0.00372,
+    "prompt_tokens": 3672,
+    "completion_tokens": 536,
+    "calls": 2
+   }
+  },
+  "sep10-interviews": {
+   "summary": "You ran two backend interviews today and wrote up detailed feedback for both right after; the first candidate was strong on system design but shaky on payments, the second couldn't explain their own project.",
+   "takeaways": [
+    "Wrote detailed feedback for both interviews instead of vague \"seemed fine\" notes",
+    "Interviews drain you more than coding"
+   ],
+   "tags": [
+    "interviews",
+    "hiring",
+    "feedback"
+   ],
+   "mood": "flat",
+   "impact_note": null,
+   "acknowledged_by": null,
+   "categories": [
+    "collaboration",
+    "leadership"
+   ],
+   "classified_by": "llm",
+   "project_name": "Q4 Hiring",
+   "spend": {
+    "cost": 0.003214,
+    "prompt_tokens": 3528,
+    "completion_tokens": 444,
+    "calls": 2
+   }
+  },
+  "sep14-quiet": {
+   "summary": "A quiet day without meetings. You read through the processor's new webhook docs and took notes for a migration next quarter, reviewed three PRs including one of Leo's, and put up a small PR to clean up logging in the ledger service.",
+   "takeaways": [
+    "Reviewed three PRs and left a few comments.",
+    "Made notes from the processor's webhook docs for a migration next quarter.",
+    "Put up a small PR to clean up logging in the ledger service."
+   ],
+   "tags": [
+    "code-review",
+    "documentation",
+    "planning"
+   ],
+   "mood": "flat",
+   "impact_note": null,
+   "acknowledged_by": null,
+   "categories": [
+    "collaboration"
+   ],
+   "classified_by": "llm",
+   "project_name": "Ledger Reconciliation",
+   "spend": {
+    "cost": 0.00326,
+    "prompt_tokens": 3568,
+    "completion_tokens": 490,
+    "calls": 2
+   }
+  },
+  "sep16-people": {
+   "summary": "You spent the day on people work: three one-on-ones (Leo's on-call shadowing, Aisha's move to platform, a tense ownership conversation with Marcus), then an interview debrief for the backend role.",
+   "takeaways": [
+    "Leo handled his first page by himself before pinging you.",
+    "Your team owns the payment client retry logic until the new client ships, then it moves to platform.",
+    "You're a hire on the second backend candidate."
+   ],
+   "tags": [
+    "1-on-1s",
+    "mentoring",
+    "interviews",
+    "ownership"
+   ],
+   "mood": "flat",
+   "impact_note": null,
+   "acknowledged_by": null,
+   "categories": [
+    "collaboration",
+    "leadership",
+    "growth"
+   ],
+   "classified_by": "llm",
+   "project_name": "Q4 Hiring",
+   "spend": {
+    "cost": 0.003516,
+    "prompt_tokens": 3852,
+    "completion_tokens": 524,
+    "calls": 2
+   }
+  },
+  "sep17-five-percent": {
+   "summary": "You rolled out the Checkout Revamp to 5% of traffic. You double-checked the feature flag config and kill switch with Priya in staging, flipped it at eleven, and watched dashboards all afternoon with conversion matching the old flow and no new errors.",
+   "takeaways": [
+    "You shipped Checkout Revamp to 5% of traffic after verifying the flag config and kill switch in staging.",
+    "Conversion is tracking the old flow with no new errors so far, so the plan is to go to 25% next week if it stays quiet."
+   ],
+   "tags": [
+    "rollout",
+    "shipped",
+    "flaky-tests"
+   ],
+   "mood": "up",
+   "impact_note": "Rolled Checkout Revamp out to 5% of traffic with conversion matching the old flow",
+   "acknowledged_by": null,
+   "categories": [
+    "wins",
+    "collaboration"
+   ],
+   "classified_by": "llm",
+   "project_name": "Checkout Revamp",
+   "spend": {
+    "cost": 0.003489,
+    "prompt_tokens": 3554,
+    "completion_tokens": 546,
+    "calls": 2
+   }
+  },
+  "sep18-dashboard-p95": {
+   "summary": "You profiled the Merchant Dashboard transactions page, which was slow at 1.8s p95, and found a missing composite index plus unnecessary full refund history fetches. After adding the index and making the refund data lazy, it's down to about 600ms at p95 in production.",
+   "takeaways": [
+    "Profiled the slow transactions page and found two root causes: a missing composite index and unnecessary refund history fetches.",
+    "Reduced p95 latency from ~1.8s to ~600ms in production.",
+    "You want to write up your profiling approach so the team can reuse it."
+   ],
+   "tags": [
+    "performance",
+    "shipped",
+    "indexing",
+    "profiling"
+   ],
+   "mood": "up",
+   "impact_note": "Cut transactions page p95 latency from ~1.8s to ~600ms in production",
+   "acknowledged_by": "Dev",
+   "categories": [
+    "wins",
+    "leadership"
+   ],
+   "classified_by": "llm",
+   "project_name": "Merchant Dashboard",
+   "spend": {
+    "cost": 0.003645,
+    "prompt_tokens": 3702,
+    "completion_tokens": 569,
+    "calls": 2
+   }
+  },
+  "sep21-double-charge": {
+   "summary": "You rolled checkout out to fifty percent and it caused forty-one double charges from a regenerated idempotency key. You rolled back within twenty minutes and finance refunded everyone the same day.",
+   "takeaways": [
+    "Rolled back a fifty percent checkout rollout within twenty minutes after it caused forty-one double charges",
+    "The idempotency key was regenerated on retry so processor timeouts double-charged customers",
+    "Finance issued all refunds by the afternoon"
+   ],
+   "tags": [
+    "incident",
+    "rollout",
+    "postmortem",
+    "pairing"
+   ],
+   "mood": "down",
+   "impact_note": "rolled back within twenty minutes, all forty-one customers refunded same day",
+   "acknowledged_by": null,
+   "categories": [
+    "collaboration",
+    "growth",
+    "challenges"
+   ],
+   "classified_by": "llm",
+   "project_name": "Checkout Revamp",
+   "spend": {
+    "cost": 0.003713,
+    "prompt_tokens": 3694,
+    "completion_tokens": 586,
+    "calls": 2
+   }
+  },
+  "sep22-fix-and-meeting": {
+   "summary": "You wrote the fix for the retry bug so the key is generated once per checkout attempt and persisted, and added a test that simulates the processor timeout. Priya reviewed it and caught the case where the retry happens after the session refreshes. Later, Grace pulled you into a meeting about pausing the rollout, and you got defensive; you landed on going back to fifty percent Thursday if the postmortem goes okay.",
+   "takeaways": [
+    "The retry bug fix was nailed down after Priya caught the session-refresh case.",
+    "The rollout is going back to fifty percent Thursday pending the postmortem.",
+    "The product meeting got defensive and left you drained."
+   ],
+   "tags": [
+    "code-review",
+    "rollout",
+    "postmortem",
+    "planning"
+   ],
+   "mood": "down",
+   "impact_note": "fixed the retry bug with key generated once per checkout attempt and persisted",
+   "acknowledged_by": null,
+   "categories": [
+    "wins",
+    "collaboration",
+    "growth"
+   ],
+   "classified_by": "llm",
+   "project_name": "Checkout Revamp",
+   "spend": {
+    "cost": 0.003818,
+    "prompt_tokens": 3714,
+    "completion_tokens": 609,
+    "calls": 2
+   }
+  },
+  "sep23-postmortem": {
+   "summary": "You ran the postmortem this morning; it went fine and stayed blameless, producing three action items: a timeout test in the standard checkout suite, a retries dashboard, and a five-percent canary before big jumps. You own the first item, already done yesterday, and spent the rest of the day catching up on reviews.",
+   "takeaways": [
+    "The postmortem was blameless and produced three action items",
+    "Your timeout test action item is already done",
+    "You feel a lot lighter than Monday after catching up on reviews"
+   ],
+   "tags": [
+    "postmortem",
+    "incident",
+    "code-review",
+    "rollout",
+    "flaky-tests"
+   ],
+   "mood": "up",
+   "impact_note": null,
+   "acknowledged_by": null,
+   "categories": [
+    "wins",
+    "collaboration",
+    "leadership"
+   ],
+   "classified_by": "llm",
+   "project_name": "Checkout Revamp",
+   "spend": {
+    "cost": 0.003514,
+    "prompt_tokens": 3552,
+    "completion_tokens": 552,
+    "calls": 2
+   }
+  },
+  "sep24-checkout-100": {
+   "summary": "You shipped the Checkout Revamp at 100% after rolling back to 50% this morning, watching the retry dashboard, and confirming no double charges. Grace called out your retry fix in the launch channel.",
+   "takeaways": [
+    "The Checkout Revamp is fully out after six months of work.",
+    "The retry fix was recognized publicly and meant a lot after Tuesday.",
+    "You're relieved and ready to rest."
+   ],
+   "tags": [
+    "shipped",
+    "rollout",
+    "retry-fix"
+   ],
+   "mood": "up",
+   "impact_note": "Checkout Revamp shipped at 100% with conversion up on the new flow and no double charges.",
+   "acknowledged_by": "Grace",
+   "categories": [
+    "wins",
+    "challenges"
+   ],
+   "classified_by": "llm",
+   "project_name": "Checkout Revamp",
+   "spend": {
+    "cost": 0.003459,
+    "prompt_tokens": 3584,
+    "completion_tokens": 536,
+    "calls": 2
+   }
+  },
+  "sep25-short": {
+   "summary": "You fixed the flaky timezone test in the ledger suite, then wrapped up for the week.",
+   "takeaways": [
+    "Fixed the flaky timezone test in the ledger suite."
+   ],
+   "tags": [
+    "flaky-tests"
+   ],
+   "mood": "flat",
+   "impact_note": null,
+   "acknowledged_by": null,
+   "categories": [
+    "wins"
+   ],
+   "classified_by": "llm",
+   "project_name": "Ledger Reconciliation",
+   "spend": {
+    "cost": 0.002662,
+    "prompt_tokens": 3418,
+    "completion_tokens": 362,
+    "calls": 2
+   }
+  },
+  "sep27-sunday-nerves": {
+   "summary": "You spent Sunday preparing for Tuesday's architecture review of the event-sourced ledger design, finishing the diagrams and migration section. You're anxious that Marcus will push back on the slow event-replay approach for rebuilding balances, which you don't have a good answer for yet.",
+   "takeaways": [
+    "Finished the diagrams and migration section for the ledger architecture doc.",
+    "The event-replay approach for rebuilding balances is slow and you don't have a good answer for it yet.",
+    "Writing it down helped ease some of the anxiety about the review."
+   ],
+   "tags": [
+    "design-review",
+    "documentation",
+    "performance",
+    "planning"
+   ],
+   "mood": "down",
+   "impact_note": null,
+   "acknowledged_by": null,
+   "categories": [
+    "growth",
+    "challenges"
+   ],
+   "classified_by": "llm",
+   "project_name": "Ledger Reconciliation",
+   "spend": {
+    "cost": 0.003188,
+    "prompt_tokens": 3616,
+    "completion_tokens": 505,
+    "calls": 2
+   }
+  }
+ }
+}

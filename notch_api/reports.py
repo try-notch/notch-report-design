@@ -237,8 +237,8 @@ def run_report_job(db_path, job_id, *, client):
                     return  # discarded while it was counted: nothing to ask the model for
             report_ids, milestone_ids = (set(store.json_list(report["source_entry_ids"])),
                                          {e["id"] for e in entries if e["is_milestone"]})
-            projects = {store.normalize_tag(r["name"]) for r in
-                        conn.execute("SELECT name FROM projects WHERE user_id = ?", (report["user_id"],))}
+            projects = [r["name"] for r in
+                        conn.execute("SELECT name FROM projects WHERE user_id = ?", (report["user_id"],))]
             prose, themes, highlights = client.tool_call(
                 system=SYSTEM_PROMPT, user=user, tool_name="write_report",
                 description="Write the Notch report document for this range.", parameters=WRITE_REPORT,
@@ -358,14 +358,16 @@ def _clean(doc, report_ids, milestone_ids, projects):
     The model's document, made safe to store -> (prose, themes, highlights).
 
     Missing prose is a refusal: there is nothing honest to render. Everything else is
-    repaired: themes normalised, category and project names dropped, at most five; a highlight's ids
+    repaired: themes normalised, categories and any theme repeating one of `projects` (names,
+    store.project_echo) dropped, at most five; a highlight's ids
     cut to the notches this report counted; an unknown kind, or `milestone` resting on
     no milestone notch, becomes `note` (the app draws a milestone with the Tree's badge).
     """
     prose = {key: _text(doc.get(key)) for key in ("headline", "lede", "body")}
     if not all(prose.values()):
         raise ModelRefused(f"write_report left {', '.join(k for k, v in prose.items() if not v)} empty.")
-    themes = [t for t in store.normalize_tags(_list(doc.get("themes"))) if t not in CATEGORIES and t not in projects][:5]
+    echoes = store.project_echo(projects)
+    themes = [t for t in store.normalize_tags(_list(doc.get("themes"))) if t not in CATEGORIES and not echoes(t)][:5]
     highlights = []
     for h in _list(doc.get("highlights")):
         if not isinstance(h, dict) or not _text(h.get("title")):

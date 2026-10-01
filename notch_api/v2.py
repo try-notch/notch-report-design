@@ -122,6 +122,17 @@ def _transcript(value, cfg):
     return value.strip()
 
 
+def _writing_prompts(cfg, kind):
+    """
+    (labels, check, prompt_version) for analyze or takeaways: remote config's variant for
+    `kind`, and its check, or None when that is "off". The version names both ("v5+c1"),
+    so a notch says which words wrote it and whether they were checked.
+    """
+    version, check_name = cfg["prompts"][kind], cfg["prompts"]["check"]
+    check = prompts.variant("check", check_name)
+    return prompts.variant(kind, version), check, version if check is None else f"{version}+{check_name}"
+
+
 def _date(value, name):
     try:
         return store.parse_date(value)
@@ -269,9 +280,14 @@ class V2:
         s, cfg, entry = self.s, caller.cfg, request_entry(request.scope)
         versions = {"config_version": cfg.version, "prompt_version": prompt_version,
                     "app_version": caller.client.app_version, "platform": caller.client.platform}
-        started = await run_in_threadpool(
-            s.meter.start, user_id=caller.user_id, kind=kind, key=key, body_hmac=body_hmac,
-            deadline_seconds=cfg["deadlines"][kind] + GRACE, config=cfg, sizes=sizes, versions=versions)
+        try:
+            started = await run_in_threadpool(
+                s.meter.start, user_id=caller.user_id, kind=kind, key=key, body_hmac=body_hmac,
+                deadline_seconds=cfg["deadlines"][kind] + GRACE, config=cfg, sizes=sizes, versions=versions)
+        except Refusal as refusal:
+            entry["metered"] = getattr(refusal, "metered", False)   # its `rejected` row, if start() wrote one
+            raise
+        entry["metered"] = True   # from here on the call has a usage row: refusals.py leaves it alone
         entry["attempt"] = started.attempt
         usage, outcome, extras = Usage(), {"ok": False, "code": None}, {}
         try:
@@ -443,14 +459,14 @@ class V2:
         self.inflight.enter(caller.user_id, cfg["max_in_flight"])
         try:
             raw, transcript, project_names, vocabulary = await self._labelled_body(request, caller)
-            version = cfg["prompts"][kind]
-            labels = prompts.variant(kind, version)
+            labels, check, version = _writing_prompts(cfg, kind)
 
             def work(bound, extras):
                 return analysis.analyze_text(
                     bound, transcript, project_names=project_names, vocabulary=vocabulary, labels=labels,
                     classifier=cfg["classifier"], max_tokens=cfg["chat"]["max_tokens_analyze"],
-                    thresholds=cfg["category_thresholds"], project_confidence=cfg["project_confidence"])
+                    thresholds=cfg["category_thresholds"], project_confidence=cfg["project_confidence"],
+                    check=check)
 
             def respond(result, usage, extras):
                 return {"summary": result["summary"], "takeaways": result["takeaways"], "tags": result["tags"],
@@ -475,12 +491,12 @@ class V2:
         self.inflight.enter(caller.user_id, cfg["max_in_flight"])
         try:
             raw, transcript, project_names, vocabulary = await self._labelled_body(request, caller)
-            version = cfg["prompts"][kind]
-            labels = prompts.variant(kind, version)
+            labels, check, version = _writing_prompts(cfg, kind)
 
             def work(bound, extras):
                 return analysis.write_takeaways(bound, transcript, project_names=project_names, vocabulary=vocabulary,
-                                                labels=labels, max_tokens=cfg["chat"]["max_tokens_analyze"])
+                                                labels=labels, max_tokens=cfg["chat"]["max_tokens_analyze"],
+                                                check=check)
 
             def respond(result, usage, extras):
                 return {"takeaways": result["takeaways"], "tags": result["tags"], "config_version": cfg.version,
@@ -727,8 +743,7 @@ def write_report(client, req, facts, writer, *, transcripts, max_tokens, tempera
     """One forced write_report call -> (prose, themes, highlights), repaired by reports._clean."""
     report_ids = {e["id"] for e in req["entries"]}
     milestone_ids = {e["id"] for e in req["entries"] if e["is_milestone"]}
-    projects = {store.normalize_tag(name) for name in req["project_names"]
-                + [e["project_name"] for e in req["entries"] if e["project_name"]]}
+    projects = req["project_names"] + [e["project_name"] for e in req["entries"] if e["project_name"]]
     return client.tool_call(
         system=writer.system, user=report_message(req, facts, transcripts=transcripts), tool_name="write_report",
         description="Write the Notch report document for this range.", parameters=writer.schema,

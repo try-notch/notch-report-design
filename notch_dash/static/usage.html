@@ -10,12 +10,20 @@
 <link rel="stylesheet" href="static/style.css">
 <script src="static/usage.js" defer></script>
 </head>
-<body>
+<body class="usage">
+<svg class="defs" aria-hidden="true" focusable="false">
+  <symbol id="g-ok" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7"/></symbol>
+  <symbol id="g-warn" viewBox="0 0 16 16"><path d="M8 1.2 15.4 14.6H.6Z"/></symbol>
+  <symbol id="g-critical" viewBox="0 0 16 16"><path d="M8 .6 15.4 8 8 15.4.6 8Z"/></symbol>
+  <symbol id="g-unknown" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.4" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></symbol>
+  <symbol id="g-busy" viewBox="0 0 48 48"><path d="M40 8C20 8 9 19 9 33c0 3 .7 5.6 1.9 7.8C15 30 23 24 35 21c-9 5-15 11-19 21c3 1.3 6 1.9 9 1.6C39 42 44 28 40 8Z"/></symbol>
+</svg>
+
 <header class="top">
   <div class="wrap top-in">
     <div class="overall">
       <h1 class="eyebrow">Notch usage</h1>
-      <p class="lead">Every account on the /v2 server — counts, timings, costs and codes, never what anyone said. Days are UTC.</p>
+      <p class="lead">Every account on the /v2 server: counts, timings, costs and codes, never what anyone said.</p>
     </div>
     <p id="fresh" class="fresh">Reading…</p>
   </div>
@@ -23,58 +31,65 @@
 
 <main class="wrap">
   <section id="notice" class="notice" hidden aria-labelledby="notice-title">
-    <div><h2 id="notice-title">Can’t read the numbers</h2><p id="notice-text"></p></div>
+    <svg class="g" aria-hidden="true"><use id="notice-glyph" href="#g-warn"/></svg>
+    <div><h2 id="notice-title">Needs a look</h2><ul id="notice-list"></ul></div>
   </section>
 
-  <section aria-labelledby="h-today">
-    <h2 id="h-today">Today</h2>
-    <div class="card"><div id="today" class="metrics"></div></div>
-  </section>
-
-  <section aria-labelledby="h-week">
-    <h2 id="h-week">Last 7 days</h2>
-    <div class="card"><div id="week" class="metrics"></div></div>
-  </section>
+  <div class="pair">
+    <section aria-labelledby="h-day">
+      <h2 id="h-day">Last 24 hours</h2>
+      <div class="card"><div id="day" class="metrics"></div></div>
+    </section>
+    <section aria-labelledby="h-week">
+      <h2 id="h-week">Last 7 days</h2>
+      <div class="card"><div id="week" class="metrics"></div><p id="since" class="fact"></p></div>
+    </section>
+  </div>
 
   <div class="split">
     <div class="col">
       <section aria-labelledby="h-daily">
-        <h2 id="h-daily">Day by day</h2>
-        <div class="card"><table id="daily" class="tbl"></table></div>
-      </section>
-      <section aria-labelledby="h-latency">
-        <h2 id="h-latency">Processing time <span class="note">(server, last 7 days)</span></h2>
-        <div class="card"><table id="latency" class="tbl"></table><p id="audio" class="note"></p></div>
+        <h2 id="h-daily">Day by day <span class="note">(UTC days)</span></h2>
+        <div id="daily" class="card"></div>
       </section>
       <section aria-labelledby="h-problems">
         <h2 id="h-problems">Problems <span class="note">(last 7 days)</span></h2>
-        <div class="card"><p id="inflight" class="note"></p><table id="problems" class="tbl"></table></div>
+        <div id="problems" class="card"></div>
+      </section>
+      <section aria-labelledby="h-models">
+        <h2 id="h-models">Models <span class="note">(last 7 days)</span></h2>
+        <div id="models" class="card"></div>
       </section>
     </div>
     <div class="col">
       <section aria-labelledby="h-accounts">
         <h2 id="h-accounts">Accounts</h2>
-        <div class="card"><div id="accounts" class="metrics"></div></div>
-      </section>
-      <section aria-labelledby="h-top">
-        <h2 id="h-top">Top accounts today</h2>
-        <div class="card"><table id="top" class="tbl"></table></div>
-      </section>
-      <section aria-labelledby="h-models">
-        <h2 id="h-models">Models <span class="note">(last 7 days)</span></h2>
-        <div class="card"><table id="models" class="tbl"></table></div>
-      </section>
-      <section aria-labelledby="h-zdr">
-        <h2 id="h-zdr">Zero data retention <span class="note">(audited calls)</span></h2>
-        <div class="card"><table id="zdr" class="tbl"></table></div>
+        <div id="accounts" class="card"></div>
       </section>
       <section aria-labelledby="h-versions">
         <h2 id="h-versions">App versions <span class="note">(active, last 7 days)</span></h2>
-        <div class="card"><table id="versions" class="tbl"></table></div>
+        <div id="versions" class="card"></div>
+      </section>
+      <section aria-labelledby="h-zdr">
+        <h2 id="h-zdr">Zero data retention <span class="note">(last 7 days)</span></h2>
+        <div id="zdr" class="card"></div>
+      </section>
+      <section aria-labelledby="h-server">
+        <h2 id="h-server">Server</h2>
+        <div id="server" class="card"></div>
       </section>
     </div>
   </div>
-  <p class="note"><a href="harness">This stack’s health →</a></p>
+
+  <section aria-labelledby="h-calls">
+    <h2 id="h-calls">Speed and cost <span class="note">(last 7 days)</span></h2>
+    <div id="calls" class="card"></div>
+  </section>
+  <section aria-labelledby="h-recent">
+    <h2 id="h-recent">Recent calls <span class="note">(newest first)</span></h2>
+    <div id="recent" class="card"></div>
+  </section>
+  <p id="harness" class="note"></p>
 </main>
 </body>
 </html>

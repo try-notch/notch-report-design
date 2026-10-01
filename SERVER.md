@@ -57,10 +57,14 @@ and resets the profile and settings to their defaults. The user row stays.
 ```bash
 .venv/bin/python -m notch_api.seed               # the 52 demo transcripts, analysed for real
 .venv/bin/python -m notch_api.eval_categories    # Jev vs the chat model on the hand labels
+.venv/bin/python eval_writing.py show --notches v4 v5 --reports r1 r2   # the writing variants, side by side
+.venv/bin/python eval_writing.py check c1 --notches v5                 # the check alone, over v5's writing
 .venv/bin/python -m notch_api.admin config show  # /v2's remote config (NOTCH_METER_DB)
-.venv/bin/python -m pytest -q                    # offline, ~25 s
+.venv/bin/python -m pytest -q                    # offline, ~35 s
 .venv/bin/python e2e/run_e2e.py --offline        # the /v1 flow on fakes, ~2 s
 .venv/bin/python e2e/run_e2e.py                  # the /v1 flow on real models, ~2.5 min, ~$0.06
+.venv/bin/python e2e/check_route.py              # the writing check through /v2, real models, ~30 s, ~$0.01
+.venv/bin/python e2e/dash_usage.py               # /v2, the meter and the usage page in a browser, on fakes, ~20 s
 ```
 
 ## /v2: what it serves
@@ -207,6 +211,12 @@ category prompt from `prompt_variants.py`; `entries.classified_by` records which
 decided. Transient OpenRouter failures (429, 5xx, in-band errors, timeouts) are retried
 with backoff; an answer that parses but breaks its schema is asked for once more.
 
+When remote config turns the check on (`prompts.check`: `c1`), the chat model makes a third
+call on /v2: it reads the finished writing beside the transcript and returns fixes, each quoting
+the transcript words that show an item wrong. A fix whose quote isn't in the transcript is
+dropped. The check has 20 s of the request at most, and one that fails leaves the notch unchecked,
+never failed (`analysis._checked`).
+
 ### The categories, measured
 
 The five categories stay server-side (they feed the report's facts, never the wire).
@@ -239,7 +249,10 @@ Python function every connection registers; `users.reminder_weekdays` has no sub
 
 **Decisions of this branch:**
 - Tags are the app's hashtags: lowercase, hyphenated (`flaky-tests`), never a project name
-  (§3.4 stops mirroring the project into tags) or a category name.
+  (§3.4 stops mirroring the project into tags) or a category name. The server drops a tag or a
+  report theme that repeats a project, whole or by a word or short form of its name ('recon'
+  beside Ledger Reconciliation), using only the project names sent with the request
+  (`store.project_echo`).
 - `users` keeps `industry` and `years_experience` (register A1), which §3.1's DDL omits.
 - Internal columns never sent: `entries.categories`, `category_scores`, `classified_by`;
   `reports.project_id` and `tag` record a report's scope.

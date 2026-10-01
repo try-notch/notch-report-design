@@ -1,8 +1,8 @@
 """
 services.py — everything /v2 needs, built once: the meter, remote config, the token
 verifier, the model client, the audio tool, the ZDR auditor, the account-deletion calls,
-the temp root and the body-HMAC key. create_app(services=...) mounts /v2 with them; tests
-build one with fakes, and `from_env` builds the real one.
+the refusal counter, the temp root and the body-HMAC key. create_app(services=...) mounts
+/v2 with them; tests build one with fakes, and `from_env` builds the real one.
 
 THE ENVIRONMENT (see deploy/notch.env.example):
   NOTCH_ENV=prod          refuses to start without SUPABASE_URL, SUPABASE_SECRET_KEY,
@@ -33,6 +33,7 @@ from . import config
 from .auth import Authenticator, Verifier
 from .identity import AppleRevoker, SupabaseAdmin
 from .meter import Meter
+from .refusals import RefusalCounter
 from .remote_config import RemoteConfig
 from .speech import FFmpeg
 from .worker import LazyClient
@@ -56,11 +57,17 @@ class Services:
     prod: bool = False
     # Model calls are network-bound; ffmpeg's CPU is capped separately (transcribe_concurrency).
     executor: ThreadPoolExecutor = field(default_factory=lambda: ThreadPoolExecutor(16, thread_name_prefix="notch-v2"))
+    refusals: RefusalCounter | None = None   # the answers with no usage row, on the meter's clock
+
+    def __post_init__(self):
+        if self.refusals is None:
+            self.refusals = RefusalCounter(self.meter, clock=self.meter.clock)
 
     def body_hmac(self, body):
         return hmac.new(self.body_key, body, hashlib.sha256).digest()
 
     def shutdown(self):
+        self.refusals.stop()
         self.zdr.shutdown()
         self.executor.shutdown(wait=False, cancel_futures=True)
 

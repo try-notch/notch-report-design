@@ -1,0 +1,426 @@
+{
+ "kind": "notches",
+ "variant": "v5",
+ "model": "deepseek/deepseek-v4-pro-0813",
+ "classifier": "chat",
+ "run_at": "2026-09-29T18:51:04Z",
+ "results": {
+  "sep01-planning": {
+   "summary": "Month started with planning: you and Dev went through the checkout revamp rollout, phasing 5%, 25%, 50%, then everyone a few days apart, with the kill switch tested before each step. He wanted to go faster, you pushed back, and you met in the middle. You also blocked out the ledger recon work because the mismatches are driving finance nuts. Feels like a good, busy month ahead.",
+   "takeaways": [
+    "Walked through the checkout revamp rollout plan with Dev, phasing 5%, 25%, 50%, then everyone with kill switch tests.",
+    "Pushed back on Dev's faster rollout pace and met in the middle.",
+    "Blocked out the recon work because the mismatches are driving finance nuts."
+   ],
+   "tags": [
+    "planning",
+    "rollout"
+   ],
+   "mood": "up",
+   "impact_note": null,
+   "acknowledged_by": null,
+   "categories": [
+    "collaboration",
+    "leadership"
+   ],
+   "classified_by": "llm",
+   "project_name": "Checkout Revamp",
+   "spend": {
+    "cost": 0.002717,
+    "prompt_tokens": 4502,
+    "completion_tokens": 557,
+    "calls": 2
+   }
+  },
+  "sep03-recon-cutoff": {
+   "summary": "Most of the day went to recon on the ledger job. Tracing the flagged mismatches showed the processor's files cut off at midnight UTC while the code bucketed by Pacific time, so late-evening entries landed on the wrong day. A fix pushed to staging cut the dry run from 340 mismatches down to 12, which you'll dig into tomorrow. Frustrated through the morning, but felt really good by the end.",
+   "takeaways": [
+    "Traced the nightly mismatches to a UTC-vs-Pacific cutoff bug in your own code.",
+    "Pushed a fix to staging; dry run dropped from 340 mismatches to 12.",
+    "Twelve mismatches left to understand tomorrow."
+   ],
+   "tags": [
+    "shipped",
+    "flaky-tests",
+    "recon"
+   ],
+   "mood": "up",
+   "impact_note": "dry run down from 340 mismatches to 12",
+   "acknowledged_by": null,
+   "categories": [
+    "wins",
+    "growth",
+    "challenges"
+   ],
+   "classified_by": "llm",
+   "project_name": "Ledger Reconciliation",
+   "spend": {
+    "cost": 0.002904,
+    "prompt_tokens": 4700,
+    "completion_tokens": 597,
+    "calls": 2
+   }
+  },
+  "sep08-pairing-leo": {
+   "summary": "Spent the afternoon pairing with Leo on his first real PR to the ledger service. You walked him through the double-entry checks, and he ended up writing the test first on his own. The morning was code reviews for the checkout team. A good, pretty normal day.",
+   "takeaways": [
+    "Paired with Leo on his first ledger service PR.",
+    "Leo wrote the double-entry test first on his own.",
+    "Reviewed checkout team code in the morning."
+   ],
+   "tags": [
+    "pairing",
+    "mentoring",
+    "code-review"
+   ],
+   "mood": "up",
+   "impact_note": null,
+   "acknowledged_by": null,
+   "categories": [
+    "collaboration",
+    "leadership"
+   ],
+   "classified_by": "llm",
+   "project_name": "Ledger Reconciliation",
+   "spend": {
+    "cost": 0.002442,
+    "prompt_tokens": 4460,
+    "completion_tokens": 473,
+    "calls": 2
+   }
+  },
+  "sep09-recon-clean": {
+   "summary": "The recon job ran clean for the whole week, and the 12 mismatches from last week were refunds issued across the cutoff, which you fixed. Hannah from finance said they'll stop the manual month-end spreadsheet, saving her team about 2 days each close. You've had this since June and bought the team donuts.",
+   "takeaways": [
+    "Shipped the Ledger Reconciliation clean run, 7 nights with zero mismatches.",
+    "Fixed the 12 mismatches from last week, refunds across the cutoff.",
+    "Hannah says finance will drop the manual spreadsheet, saving 2 days each close."
+   ],
+   "tags": [
+    "shipped",
+    "rollout"
+   ],
+   "mood": "up",
+   "impact_note": "finance will stop the manual spreadsheet, saving about 2 days each close",
+   "acknowledged_by": "Hannah",
+   "categories": [
+    "wins",
+    "collaboration",
+    "growth"
+   ],
+   "classified_by": "llm",
+   "project_name": "Ledger Reconciliation",
+   "spend": {
+    "cost": 0.002765,
+    "prompt_tokens": 4600,
+    "completion_tokens": 566,
+    "calls": 2
+   }
+  },
+  "sep10-interviews": {
+   "summary": "Ran two backend interviews. The first candidate was strong on system design but weak on payments; the second couldn't explain their own project and reads as a no. You wrote both write-ups in detail right after, since vague \"seemed fine\" feedback bothers you. Interviews drained you more than coding does.",
+   "takeaways": [
+    "Interviewed two backend candidates and wrote up detailed feedback on both.",
+    "The first was strong on system design but hand-wavy on payments.",
+    "The second couldn't explain their own project and is a likely no."
+   ],
+   "tags": [
+    "interviews",
+    "hiring"
+   ],
+   "mood": "flat",
+   "impact_note": null,
+   "acknowledged_by": null,
+   "categories": [
+    "collaboration",
+    "leadership",
+    "challenges"
+   ],
+   "classified_by": "llm",
+   "project_name": "Q4 Hiring",
+   "spend": {
+    "cost": 0.00233,
+    "prompt_tokens": 4456,
+    "completion_tokens": 478,
+    "calls": 2
+   }
+  },
+  "sep14-quiet": {
+   "summary": "A quiet day. Spent the morning reading the processor's webhook docs and making notes for the migration next quarter. Reviewed three PRs, one of Leo's, and put up a small PR to clean up logging in the ledger service. Nice to have a day without meetings.",
+   "takeaways": [
+    "Read the processor's webhook docs and made migration notes for next quarter.",
+    "Reviewed three PRs, left a few comments on Leo's.",
+    "Cleaned up logging in the ledger service."
+   ],
+   "tags": [
+    "code-review",
+    "documentation",
+    "planning"
+   ],
+   "mood": "flat",
+   "impact_note": null,
+   "acknowledged_by": null,
+   "categories": [
+    "collaboration"
+   ],
+   "classified_by": "llm",
+   "project_name": null,
+   "spend": {
+    "cost": 0.002368,
+    "prompt_tokens": 4496,
+    "completion_tokens": 491,
+    "calls": 2
+   }
+  },
+  "sep16-people": {
+   "summary": "A full day of people work, starting with three one-on-ones. Leo shadowing on-call handled his first page alone, which you were proud of; Aisha wants to move to platform, and you'll talk to her manager-to-be. A tense conversation with Marcus settled that your team owns the retry logic in the payment client until the new client ships, which you'll write down.",
+   "takeaways": [
+    "Leo handled his first on-call page solo.",
+    "Marcus agreed your team owns retry logic until the new client ships.",
+    "Hired on the second backend candidate."
+   ],
+   "tags": [
+    "1-on-1s",
+    "oncall",
+    "interviews",
+    "planning"
+   ],
+   "mood": "flat",
+   "impact_note": "hired on the second backend candidate",
+   "acknowledged_by": null,
+   "categories": [
+    "collaboration",
+    "leadership"
+   ],
+   "classified_by": "llm",
+   "project_name": "Q4 Hiring",
+   "spend": {
+    "cost": 0.00368,
+    "prompt_tokens": 4780,
+    "completion_tokens": 560,
+    "calls": 2
+   }
+  },
+  "sep17-five-percent": {
+   "summary": "Rolled Checkout Revamp to 5% after testing the kill switch in staging with Priya. Watched dashboards the rest of the day; conversion tracks the old flow and no net-new errors. Planning 25% next week if it stays quiet, and cautiously happy.",
+   "takeaways": [
+    "Rolled Checkout Revamp to 5% with Priya after staging kill-switch test.",
+    "Conversion steady and no new errors on the 5% traffic.",
+    "Ramping to 25% next week if it stays quiet."
+   ],
+   "tags": [
+    "rollout",
+    "shipped",
+    "pairing"
+   ],
+   "mood": "up",
+   "impact_note": "Rolled Checkout Revamp to 5% of traffic.",
+   "acknowledged_by": null,
+   "categories": [
+    "wins",
+    "collaboration"
+   ],
+   "classified_by": "llm",
+   "project_name": "Checkout Revamp",
+   "spend": {
+    "cost": 0.003475,
+    "prompt_tokens": 4482,
+    "completion_tokens": 535,
+    "calls": 2
+   }
+  },
+  "sep18-dashboard-p95": {
+   "summary": "Profiled the slow Merchant Dashboard transactions page and found a missing composite index on merchant ID and created-at, plus full refund history being fetched for every row. Added the index and made the refunds lazy; p95 dropped from 1.8s to 600ms in production. Dev praised it in the product channel as big for merchant NPS, and there's a plan to write up the profiling approach for the team.",
+   "takeaways": [
+    "Cut Merchant Dashboard p95 from 1.8s to 600ms with a composite index and lazy refunds.",
+    "Dev called it huge for the merchant NPS work.",
+    "Going to write up the profiling approach for the team."
+   ],
+   "tags": [
+    "performance",
+    "shipped"
+   ],
+   "mood": "up",
+   "impact_note": "p95 down from 1.8s to 600ms in production",
+   "acknowledged_by": "Dev",
+   "categories": [
+    "wins",
+    "leadership",
+    "growth"
+   ],
+   "classified_by": "llm",
+   "project_name": "Merchant Dashboard",
+   "spend": {
+    "cost": 0.003556,
+    "prompt_tokens": 4630,
+    "completion_tokens": 582,
+    "calls": 2
+   }
+  },
+  "sep21-double-charge": {
+   "summary": "Checkout went to 50% this morning and started double-charging customers within an hour. The idempotency key regenerated on retry, so 41 customers were charged twice. It rolled back in 20 minutes and finance issued all refunds by the afternoon. You feel sick about it and wrote the incident timeline; postmortem is Wednesday, and Priya stayed late to go through the retry path with you.",
+   "takeaways": [
+    "Took checkout to 50%, caused 41 double charges from an idempotency bug.",
+    "Rolled back in 20 minutes and finance refunded everyone.",
+    "Priya stayed late to walk the retry path line by line."
+   ],
+   "tags": [
+    "incident",
+    "rollout",
+    "postmortem",
+    "pairing"
+   ],
+   "mood": "down",
+   "impact_note": "41 customers double-charged, all refunded same day",
+   "acknowledged_by": null,
+   "categories": [
+    "collaboration",
+    "growth",
+    "challenges"
+   ],
+   "classified_by": "llm",
+   "project_name": "Checkout Revamp",
+   "spend": {
+    "cost": 0.003682,
+    "prompt_tokens": 4622,
+    "completion_tokens": 619,
+    "calls": 2
+   }
+  },
+  "sep22-fix-and-meeting": {
+   "summary": "Wrote the retry bug fix, generating the key once per checkout attempt and persisting it, plus a test that simulates the processor timeout. Priya reviewed and caught a retry-after-session-refresh case, which you fixed together. The afternoon meeting with Grace and product got tense; you got defensive, and the team landed on returning to 50% Thursday if the postmortem goes okay. Drained by the end.",
+   "takeaways": [
+    "Wrote the retry bug fix, with a test simulating the processor timeout.",
+    "Priya caught a retry-after-session-refresh case; fixed it together.",
+    "Rollout paused to 50% Thursday if the postmortem goes okay."
+   ],
+   "tags": [
+    "code-review",
+    "rollout",
+    "postmortem"
+   ],
+   "mood": "down",
+   "impact_note": null,
+   "acknowledged_by": null,
+   "categories": [
+    "wins",
+    "collaboration",
+    "growth"
+   ],
+   "classified_by": "llm",
+   "project_name": "Checkout Revamp",
+   "spend": {
+    "cost": 0.002565,
+    "prompt_tokens": 4642,
+    "completion_tokens": 616,
+    "calls": 2
+   }
+  },
+  "sep23-postmortem": {
+   "summary": "The postmortem ran this morning and went fine, blameless as intended. It produced three action items: the timeout test goes into the standard checkout suite, retries get their own dashboard, and a 5% canary before any big jump. You own the first, already done since yesterday, and spent the rest of the day catching up on reviews, feeling a lot lighter than Monday.",
+   "takeaways": [
+    "Postmortem was blameless and produced three action items.",
+    "Owned the timeout test action item, already done.",
+    "Caught up on reviews; feeling lighter than Monday."
+   ],
+   "tags": [
+    "postmortem",
+    "code-review",
+    "incident"
+   ],
+   "mood": "up",
+   "impact_note": null,
+   "acknowledged_by": null,
+   "categories": [
+    "wins",
+    "collaboration"
+   ],
+   "classified_by": "llm",
+   "project_name": "Checkout Revamp",
+   "spend": {
+    "cost": 0.002351,
+    "prompt_tokens": 4480,
+    "completion_tokens": 557,
+    "calls": 2
+   }
+  },
+  "sep24-checkout-100": {
+   "summary": "The Checkout Revamp went to 100% after watching the retry dashboard for two hours with no double charges and conversion up a bit. Grace called out the retry fix in the launch channel, which meant a lot after Tuesday. You're genuinely relieved and will sleep well tonight.",
+   "takeaways": [
+    "Shipped the Checkout Revamp to 100%, six months of work fully out.",
+    "Grace called out the retry fix in the launch channel.",
+    "Relieved after Tuesday's scare, with no double charges on the new flow."
+   ],
+   "tags": [
+    "shipped",
+    "rollout"
+   ],
+   "mood": "up",
+   "impact_note": "conversion up a bit on the new flow",
+   "acknowledged_by": "Grace",
+   "categories": [
+    "wins",
+    "collaboration"
+   ],
+   "classified_by": "llm",
+   "project_name": "Checkout Revamp",
+   "spend": {
+    "cost": 0.002328,
+    "prompt_tokens": 4512,
+    "completion_tokens": 535,
+    "calls": 2
+   }
+  },
+  "sep25-short": {
+   "summary": "Fixed the flaky timezone test in the ledger suite, then wrapped up for the week.",
+   "takeaways": [
+    "Fixed the flaky timezone test in the ledger suite."
+   ],
+   "tags": [
+    "flaky-tests"
+   ],
+   "mood": "flat",
+   "impact_note": null,
+   "acknowledged_by": null,
+   "categories": [
+    "wins"
+   ],
+   "classified_by": "llm",
+   "project_name": "Ledger Reconciliation",
+   "spend": {
+    "cost": 0.001354,
+    "prompt_tokens": 4346,
+    "completion_tokens": 361,
+    "calls": 2
+   }
+  },
+  "sep27-sunday-nerves": {
+   "summary": "Spent Sunday preparing for Tuesday's architecture review of the event-sourced ledger design. Finished the diagrams and the migration section, but expects Marcus to push back on the slow event-replay rebuild, which still lacks a good answer. Feeling anxious, though writing it down helped.",
+   "takeaways": [
+    "Anxious about Tuesday's architecture review for the event-sourced ledger design.",
+    "Finished the diagrams and the migration section.",
+    "Marcus will likely challenge the slow event-replay rebuild, no good answer yet."
+   ],
+   "tags": [
+    "design-review",
+    "documentation",
+    "planning"
+   ],
+   "mood": "flat",
+   "impact_note": null,
+   "acknowledged_by": null,
+   "categories": [
+    "growth",
+    "challenges"
+   ],
+   "classified_by": "llm",
+   "project_name": "Ledger Reconciliation",
+   "spend": {
+    "cost": 0.002282,
+    "prompt_tokens": 4544,
+    "completion_tokens": 502,
+    "calls": 2
+   }
+  }
+ }
+}

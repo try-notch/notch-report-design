@@ -1,0 +1,313 @@
+{
+ "kind": "reports",
+ "variant": "r2",
+ "notches": "v4",
+ "model": "deepseek/deepseek-v4-pro-0813",
+ "run_at": "2026-09-29T18:26:12Z",
+ "results": {
+  "week": {
+   "facts": {
+    "notch_count": 6,
+    "project_count": 2,
+    "milestone_count": 1,
+    "project_breakdown": [
+     {
+      "name": "Checkout Revamp",
+      "notch_count": 4,
+      "share": 66
+     },
+     {
+      "name": "Ledger Reconciliation",
+      "notch_count": 2,
+      "share": 33
+     }
+    ],
+    "momentum": [
+     {
+      "date": "2026-09-21",
+      "count": 1
+     },
+     {
+      "date": "2026-09-22",
+      "count": 1
+     },
+     {
+      "date": "2026-09-23",
+      "count": 1
+     },
+     {
+      "date": "2026-09-24",
+      "count": 1
+     },
+     {
+      "date": "2026-09-25",
+      "count": 1
+     },
+     {
+      "date": "2026-09-26",
+      "count": 0
+     },
+     {
+      "date": "2026-09-27",
+      "count": 1
+     }
+    ],
+    "momentum_granularity": "day",
+    "eyebrow": "Weekly report · Sep 21 – 27"
+   },
+   "headline": "The revamp finally shipped",
+   "lede": "A week that started with a serious incident ended with the Checkout Revamp fully live, 6 months of work out the door, and your retry fix called out by Grace in the launch channel.",
+   "body": "You shipped the Checkout Revamp at 100% with conversion up on the new flow and no double charges. That's the headline, and it came a day after a 50% rollout caused 41 double charges from a regenerated idempotency key on retry. You rolled back within 20 minutes and finance refunded everyone the same day. Grace recognized your retry fix specifically in the launch channel, which after the rough product meeting on Tuesday, meant a lot.\n\nThe pattern this week was recovering with real craft. You wrote the fix so the key is generated once per checkout attempt and persisted, and added the processor-timeout test that should have existed from the start. Priya caught the session-refresh case, and you ran a blameless postmortem that produced three action items, two of which, your timeout test and the retry dashboard, were done before the week ended. You ended with the flaky timezone test in the ledger suite fixed.\n\nYou spent Sunday, against your own better judgment, preparing Tuesday's architecture review of the event-sourced ledger. The diagrams and migration section are done. Marcus may push on replaying events to rebuild balances because it's slow, and you don't have a good answer yet. Writing it down helped a bit.",
+   "themes": [
+    "incident-recovery",
+    "rollout",
+    "postmortem",
+    "retry-fix",
+    "design-review"
+   ],
+   "highlights": [
+    {
+     "title": "Checkout Revamp shipped",
+     "detail": "100% live, no double charges, conversion up.",
+     "kind": "milestone",
+     "source_entry_ids": [
+      "528B7003-78A2-596E-98DD-BD3C8A5A1E60"
+     ]
+    },
+    {
+     "title": "Retry fix recognized",
+     "detail": "Grace called it out in the launch channel.",
+     "kind": "note",
+     "source_entry_ids": [
+      "528B7003-78A2-596E-98DD-BD3C8A5A1E60"
+     ]
+    },
+    {
+     "title": "Incident recovered fast",
+     "detail": "Rolled back in 20 minutes, 41 refunded same day.",
+     "kind": "shipped",
+     "source_entry_ids": [
+      "2D8DD513-9F63-5BEE-BF30-9E8EA4319DF7"
+     ]
+    },
+    {
+     "title": "Postmortem and action items",
+     "detail": "Blameless, three items, your test already done.",
+     "kind": "collaboration",
+     "source_entry_ids": [
+      "4B4CAA9C-A033-5B07-A6EB-4849CBE17AB6"
+     ]
+    }
+   ],
+   "spend": {
+    "cost": 0.004103,
+    "prompt_tokens": 4160,
+    "completion_tokens": 699,
+    "calls": 1
+   }
+  },
+  "month": {
+   "facts": {
+    "notch_count": 15,
+    "project_count": 4,
+    "milestone_count": 2,
+    "project_breakdown": [
+     {
+      "name": "Checkout Revamp",
+      "notch_count": 6,
+      "share": 40
+     },
+     {
+      "name": "Ledger Reconciliation",
+      "notch_count": 6,
+      "share": 40
+     },
+     {
+      "name": "Q4 Hiring",
+      "notch_count": 2,
+      "share": 13
+     },
+     {
+      "name": "Merchant Dashboard",
+      "notch_count": 1,
+      "share": 6
+     }
+    ],
+    "momentum": [
+     {
+      "date": "2026-09-01",
+      "count": 1
+     },
+     {
+      "date": "2026-09-02",
+      "count": 0
+     },
+     {
+      "date": "2026-09-03",
+      "count": 1
+     },
+     {
+      "date": "2026-09-04",
+      "count": 0
+     },
+     {
+      "date": "2026-09-05",
+      "count": 0
+     },
+     {
+      "date": "2026-09-06",
+      "count": 0
+     },
+     {
+      "date": "2026-09-07",
+      "count": 0
+     },
+     {
+      "date": "2026-09-08",
+      "count": 1
+     },
+     {
+      "date": "2026-09-09",
+      "count": 1
+     },
+     {
+      "date": "2026-09-10",
+      "count": 1
+     },
+     {
+      "date": "2026-09-11",
+      "count": 0
+     },
+     {
+      "date": "2026-09-12",
+      "count": 0
+     },
+     {
+      "date": "2026-09-13",
+      "count": 0
+     },
+     {
+      "date": "2026-09-14",
+      "count": 1
+     },
+     {
+      "date": "2026-09-15",
+      "count": 0
+     },
+     {
+      "date": "2026-09-16",
+      "count": 1
+     },
+     {
+      "date": "2026-09-17",
+      "count": 1
+     },
+     {
+      "date": "2026-09-18",
+      "count": 1
+     },
+     {
+      "date": "2026-09-19",
+      "count": 0
+     },
+     {
+      "date": "2026-09-20",
+      "count": 0
+     },
+     {
+      "date": "2026-09-21",
+      "count": 1
+     },
+     {
+      "date": "2026-09-22",
+      "count": 1
+     },
+     {
+      "date": "2026-09-23",
+      "count": 1
+     },
+     {
+      "date": "2026-09-24",
+      "count": 1
+     },
+     {
+      "date": "2026-09-25",
+      "count": 1
+     },
+     {
+      "date": "2026-09-26",
+      "count": 0
+     },
+     {
+      "date": "2026-09-27",
+      "count": 1
+     },
+     {
+      "date": "2026-09-28",
+      "count": 0
+     },
+     {
+      "date": "2026-09-29",
+      "count": 0
+     },
+     {
+      "date": "2026-09-30",
+      "count": 0
+     }
+    ],
+    "momentum_granularity": "day",
+    "eyebrow": "Monthly report · September 2026"
+   },
+   "headline": "Landed two long-running projects",
+   "lede": "You finished two projects you'd carried since mid-year: the ledger reconciliation, now running clean, and the checkout revamp, shipped to 100% after a double-charge incident you rolled back in 20 minutes and fixed the next day.",
+   "body": "The recon job ran clean for 7 straight nights with zero mismatches, and Hannah from finance said they'll drop the manual month-end spreadsheet, saving her team about 2 days every close. The checkout revamp went fully out after 6 months of work, conversion up a bit on the new flow, with Grace calling out your retry fix in the launch channel. Separately, you cut the merchant dashboard transactions page from about 1.8s to about 600ms at p95, which Dev called huge for merchant NPS.\n\nThe double charges hit hard, 41 customers, and you said it plainly: it was your change, and you felt sick about it. You rolled back within 20 minutes, wrote the fix so the key is generated once per checkout attempt and persisted, and ran a blameless postmortem that produced 3 action items, one of which was already done. You also got defensive in a product meeting about pausing the rollout and said so yourself. The throughline is that you traced root causes under pressure and kept naming the hard parts instead of smoothing them over.\n\nYou flagged earlier that interviews drain you more than coding, and the Q4 hiring work stayed careful anyway: detailed feedback written right after each interview. Looking ahead, you're anxious about Tuesday's architecture review and the slow event-replay approach to rebuilding balances, and you don't have an answer for it yet. This month's pattern, finding the root cause and testing the fix, is exactly what that review will want to see.",
+   "themes": [
+    "root-cause-fixing",
+    "shipping-with-rollback",
+    "testing-the-fix",
+    "honest-postmortems",
+    "mentoring"
+   ],
+   "highlights": [
+    {
+     "title": "Recon job runs clean",
+     "detail": "Zero mismatches 7 nights; finance drops manual spreadsheet",
+     "kind": "milestone",
+     "source_entry_ids": [
+      "D4C24760-D481-5841-BEAC-31A37F456731"
+     ]
+    },
+    {
+     "title": "Checkout revamp at 100%",
+     "detail": "Conversion up on new flow; Grace recognized your retry fix",
+     "kind": "milestone",
+     "source_entry_ids": [
+      "528B7003-78A2-596E-98DD-BD3C8A5A1E60"
+     ]
+    },
+    {
+     "title": "Root-caused the recon mismatches",
+     "detail": "Timezone cutoff bug; dry run 340 to 12",
+     "kind": "shipped",
+     "source_entry_ids": [
+      "E99BD6AA-4860-53C6-8A11-FFF3416A1297"
+     ]
+    },
+    {
+     "title": "Dashboard latency cut",
+     "detail": "1.8s to 600ms p95; Dev called it huge",
+     "kind": "shipped",
+     "source_entry_ids": [
+      "577137E3-4E95-5182-BA92-469A7123D18C"
+     ]
+    }
+   ],
+   "spend": {
+    "cost": 0.005468,
+    "prompt_tokens": 6996,
+    "completion_tokens": 765,
+    "calls": 1
+   }
+  }
+ }
+}

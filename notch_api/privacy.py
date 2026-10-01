@@ -109,10 +109,14 @@ def request_entry(scope):
 
 
 class Guard:
-    """The outermost ASGI layer: request ids, the one log line per request, and the last word on any exception."""
+    """
+    The outermost ASGI layer: request ids, the one log line per request, and the last word on
+    any exception. `on_request`, when given, is handed each finished request's entry (the log
+    line's fields, before the allowlist): refusals.py counts the refused ones from it.
+    """
 
-    def __init__(self, app):
-        self.app = app
+    def __init__(self, app, on_request=None):
+        self.app, self.on_request = app, on_request
 
     def __getattr__(self, name):
         return getattr(self.app, name)   # .state, .routes... for whoever holds the app
@@ -142,6 +146,7 @@ class Guard:
                 extra={"notch": {"event": "unhandled_exception", "request_id": request_id}})
             if response["status"] is None:
                 refusal = Refusal("internal_error")
+                entry.setdefault("error_code", refusal.code)
                 body = json.dumps(refusal.body()).encode()
                 await tracked({"type": "http.response.start", "status": 500,
                                "headers": [(b"content-type", b"application/json"),
@@ -153,3 +158,5 @@ class Guard:
             entry.update(status=response["status"], response_bytes=response["bytes"],
                          latency_ms=round((time.perf_counter() - began) * 1000, 1))
             request_log.info("request", extra={"notch": {"event": "request", **entry}})
+            if self.on_request is not None:
+                self.on_request(entry)

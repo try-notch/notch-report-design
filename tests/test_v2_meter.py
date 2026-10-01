@@ -284,6 +284,7 @@ def test_the_meter_has_no_content_columns(meter):
                          "completion_tokens", "cost_usd", "models", "providers", "zdr", "config_version",
                          "prompt_version", "app_version", "platform"},
         "daily_spend": {"day", "kind", "calls", "cost_usd"},
+        "refusals": {"hour", "route", "status", "code", "calls", "last_at"},
         "active_days": {"user_id", "day", "app_version", "platform"},
         "config": {"version", "body", "note", "created_by", "created_at"},
         "cloud_records": {"user_id", "record_id", "seq", "deleted", "ciphertext", "key_id", "updated_at"},

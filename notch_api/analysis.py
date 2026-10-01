@@ -15,6 +15,12 @@ If Jev fails, the chat model is asked once more with the extended `label_entry`
 classification is taken from that. `classified_by` records which path decided
 (the E2E reports the split); like the categories, it never reaches the wire.
 
+WHEN REMOTE CONFIG NAMES A CHECK (prompts.VARIANTS["check"]), a third call reads the
+finished writing beside the transcript and returns fixes for what the transcript
+contradicts or never says; _checked applies them while the classification runs. It
+has CHECK_SECONDS at most, and a check that fails or runs out leaves the writing as it
+was: the notch is never failed for it.
+
 THE PROMPTS REUSE WHAT WAS MEASURED. They live in prompts.py as named variants
 (LABEL_V4 here): the fallback's category policy is tagger.py's winning v4 text with the
 seed catalog, and IMPACT NOTE / ACKNOWLEDGED BY / PROJECT MATCH are the measured
@@ -41,6 +47,7 @@ no match leaves the notch unassigned, which is better than a wrong project.
 
 import logging
 import os
+import re
 from concurrent.futures import ThreadPoolExecutor
 
 from . import classify, prompts, store
@@ -54,6 +61,8 @@ MAX_TAGS = 5
 MAX_TAKEAWAYS = 3
 MAX_TOKENS = 1500  # labels plus two short prose fields
 VOCABULARY_LIMIT = 100  # most-used first, so a long history cannot crowd the prompt
+CHECK_SECONDS = 20  # the most a check may add; past it the notch keeps its writing unchecked
+CHECK_TOKENS = 1200  # every item fixed and quoted, the summary included; a cut-off answer is left unchecked
 
 
 def _copied_sections(tail):
@@ -104,7 +113,7 @@ def _strings(value):
 
 
 def analyze_text(client, transcript, *, project_names, vocabulary, labels=prompts.LABEL_V4, classifier="jev",
-                 max_tokens=MAX_TOKENS, thresholds=None, project_confidence=None):
+                 max_tokens=MAX_TOKENS, thresholds=None, project_confidence=None, check=None):
     """
     The chat model's writing and a classification, side by side -> a normalised result:
     {tags, summary, takeaways, impact_note, acknowledged_by, categories, category_scores,
@@ -117,18 +126,21 @@ def analyze_text(client, transcript, *, project_names, vocabulary, labels=prompt
     summary, or the chat classification an unknown mood, since a complete entry must
     have both; everything else is cleaned rather than refused. Any other ModelError
     from the chat model propagates.
+
+    `check` (a prompts.CheckPrompts, or None for none) holds the writing to the
+    transcript once it is written (_checked); the result then also carries `checked`.
     """
     user = _user_message(transcript, project_names, vocabulary)
     chat = dict(labels=labels, max_tokens=max_tokens)
     if classifier == "chat":
         with ThreadPoolExecutor(1) as pool:
             decided = pool.submit(_label_fallback, client, user, **chat)
-            written = _write(client, user, project_names, **chat)
+            written = _checked(client, transcript, _write(client, user, project_names, **chat), check)
             return written | decided.result() | {"category_scores": None, "classified_by": "llm"}
     with ThreadPoolExecutor(1) as pool:
         decided = pool.submit(classify.classify, client, transcript, project_names=project_names,
                               thresholds=thresholds, project_confidence=project_confidence)
-        written = _write(client, user, project_names, **chat)
+        written = _checked(client, transcript, _write(client, user, project_names, **chat), check)
         try:
             return written | decided.result() | {"classified_by": "jev"}
         except ModelError as exc:
@@ -191,10 +203,10 @@ def _classified(raw):
 
 
 def _write(client, user, project_names, parse=_written, *, labels=prompts.LABEL_V4, max_tokens=MAX_TOKENS):
-    """label_entry's writing, less any tag that is a project's name (§3.4: the project is not a tag)."""
+    """label_entry's writing, less any tag that repeats a project (§3.4: the project is not a tag)."""
     written = _label(client, user, labels.system, labels.schema, parse, max_tokens)
-    projects = {store.normalize_tag(name) for name in project_names}
-    return written | {"tags": [t for t in written["tags"] if t not in projects]}
+    echoes = store.project_echo(project_names)
+    return written | {"tags": [t for t in written["tags"] if not echoes(t)]}
 
 
 def _rewritten(raw):
@@ -206,15 +218,107 @@ def _rewritten(raw):
 
 
 def write_takeaways(client, transcript, *, project_names, vocabulary, labels=prompts.LABEL_V4,
-                    max_tokens=MAX_TOKENS):
+                    max_tokens=MAX_TOKENS, check=None):
     """
     POST /v1/entries/{id}/takeaways and /v2/takeaways: the writing half of analyze_text
-    alone, the same call and the same cleaning, -> {takeaways, tags}. Jev is not asked:
-    nothing it decides is rewritten. Any ModelError propagates, and nothing is written anywhere.
+    alone, the same call, the same cleaning and the same `check`, -> {takeaways, tags}.
+    Jev is not asked: nothing it decides is rewritten. Any ModelError from the writing
+    propagates, and nothing is written anywhere.
     """
     written = _write(client, _user_message(transcript, project_names, vocabulary), project_names, _rewritten,
                      labels=labels, max_tokens=max_tokens)
+    written = _checked(client, transcript, written, check)
     return {"takeaways": written["takeaways"], "tags": written["tags"]}
+
+
+# ---------------------------------------------------------------------------
+# The check
+# ---------------------------------------------------------------------------
+
+def _checked(client, transcript, written, check):
+    """
+    `written` held to the transcript by `check` (a prompts.CheckPrompts), or as it is when
+    there is none. Each fix the check returns replaces one item whole: a takeaway, the
+    summary, the recognition or the impact note. The check gets CHECK_SECONDS of the
+    request's time at most, and one that fails or runs out leaves the writing as it was:
+    a notch is never failed for want of its check. -> the writing plus `checked`, the
+    fixes applied ([] when none were needed, None when the check could not run).
+    """
+    if check is None:
+        return written
+    try:
+        fixes = client.within(CHECK_SECONDS).tool_call(
+            system=check.system, user=_check_message(transcript, written), tool_name="check_notch",
+            description="Return the fixes this notch needs to match its transcript.", parameters=check.schema,
+            temperature=0.0, max_tokens=CHECK_TOKENS, parse=lambda raw: _fixes(raw, transcript))
+    except ModelError as exc:
+        # The code only: a ModelError's message can quote a provider's reply.
+        log.warning("the check could not run (%s); keeping the writing unchecked", exc.code)
+        return written | {"checked": None}
+    return _apply(written, fixes)
+
+
+def _check_message(transcript, written):
+    """The check's message: the transcript, then the notch's items, labelled as prompts.CHECK_ITEMS names them."""
+    items = [f"takeaway {i}: {text}" for i, text in enumerate(written["takeaways"], 1)]
+    items += [f"summary: {written['summary']}", f"recognized by: {written['acknowledged_by'] or 'nobody'}",
+              f"impact: {written['impact_note'] or 'none'}"]
+    return f"Transcript:\n\n{transcript.strip()}\n\nThe notch as written:\n" + "\n".join(items)
+
+
+def _fixes(raw, transcript):
+    """
+    check_notch's answer -> its fixes, dropping any that names no item, carries no text, or
+    quotes words the transcript doesn't hold: a fix has to show where the notch went wrong.
+    """
+    fixes = store.loose_json(raw.get("fixes"))
+    out = []
+    for fix in fixes if isinstance(fixes, list) else []:
+        fix = store.loose_json(fix)
+        if (isinstance(fix, dict) and fix.get("item") in prompts.CHECK_ITEMS and isinstance(fix.get("text"), str)
+                and _said(fix.get("quote"), transcript)):
+            out.append({"item": fix["item"], "text": fix["text"].strip(), "quote": fix["quote"].strip()})
+    return out
+
+
+def _said(quote, transcript):
+    """
+    Whether every piece of `quote` (split at an ellipsis) is in the transcript, compared word
+    for word: case, spacing, quote marks and punctuation don't count, a decimal point does.
+    """
+    def fold(text):
+        text = re.sub(r"[‘’]", "'", text.lower())
+        text = re.sub(r"(?<!\d)\.|\.(?!\d)", " ", text)  # a full stop, never a decimal point
+        return " ".join(re.sub(r"[^a-z0-9'%.]+", " ", text).split()).strip("'")
+    if not isinstance(quote, str):
+        return False
+    said = f" {' '.join(fold(w) for w in transcript.split())} "
+    pieces = [fold(p) for p in re.split(r"\.\.\.|…", quote)]
+    return any(pieces) and all(f" {p} " in said for p in pieces if p)
+
+
+def _apply(written, fixes):
+    """
+    The fixes onto a copy of `written`, each counted only if it changes something, with
+    the text it replaced as `was`. A takeaway or the summary is replaced, never blanked,
+    and a fix to a takeaway the writing doesn't have is dropped; the recognition and the
+    impact note may be cleared.
+    """
+    out, applied = dict(written, takeaways=list(written["takeaways"])), []
+    for fix in fixes:
+        item, text = fix["item"], _text(fix["text"])
+        if item.startswith("takeaway"):
+            index = int(item.split()[1]) - 1
+            if text is None or index >= len(out["takeaways"]) or text == out["takeaways"][index]:
+                continue
+            was, out["takeaways"][index] = out["takeaways"][index], text
+        else:
+            field = {"summary": "summary", "recognized by": "acknowledged_by", "impact": "impact_note"}[item]
+            if (text is None and field == "summary") or text == out[field]:
+                continue
+            was, out[field] = out[field], text
+        applied.append(fix | {"was": was})
+    return out | {"checked": applied}
 
 
 def apply_analysis(conn, user_id, entry_id, transcript, result):

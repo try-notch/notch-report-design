@@ -1,0 +1,646 @@
+{
+ "classifier": "jev",
+ "model": "typesafe/jev-1.13",
+ "runs": 3,
+ "run_at": "2026-09-29T20:25:25Z",
+ "results": {
+  "sep01-planning": [
+   {
+    "mood": "up",
+    "project_name": "Checkout Revamp",
+    "categories": [
+     "collaboration"
+    ],
+    "spend": {
+     "cost": 7.7e-05,
+     "prompt_tokens": 1824,
+     "completion_tokens": 185,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "up",
+    "project_name": "Checkout Revamp",
+    "categories": [
+     "collaboration"
+    ],
+    "spend": {
+     "cost": 7.7e-05,
+     "prompt_tokens": 1824,
+     "completion_tokens": 185,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "up",
+    "project_name": "Checkout Revamp",
+    "categories": [
+     "collaboration"
+    ],
+    "spend": {
+     "cost": 7.7e-05,
+     "prompt_tokens": 1824,
+     "completion_tokens": 185,
+     "calls": 1
+    }
+   }
+  ],
+  "sep03-recon-cutoff": [
+   {
+    "mood": "up",
+    "project_name": "Ledger Reconciliation",
+    "categories": [
+     "challenges",
+     "growth",
+     "wins"
+    ],
+    "spend": {
+     "cost": 8.1e-05,
+     "prompt_tokens": 1925,
+     "completion_tokens": 188,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "up",
+    "project_name": "Ledger Reconciliation",
+    "categories": [
+     "challenges",
+     "growth",
+     "wins"
+    ],
+    "spend": {
+     "cost": 8.1e-05,
+     "prompt_tokens": 1925,
+     "completion_tokens": 188,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "up",
+    "project_name": "Ledger Reconciliation",
+    "categories": [
+     "challenges",
+     "growth",
+     "wins"
+    ],
+    "spend": {
+     "cost": 8.1e-05,
+     "prompt_tokens": 1925,
+     "completion_tokens": 188,
+     "calls": 1
+    }
+   }
+  ],
+  "sep08-pairing-leo": [
+   {
+    "mood": "up",
+    "project_name": null,
+    "categories": [
+     "collaboration",
+     "growth",
+     "leadership"
+    ],
+    "spend": {
+     "cost": 7.6e-05,
+     "prompt_tokens": 1802,
+     "completion_tokens": 188,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "up",
+    "project_name": null,
+    "categories": [
+     "collaboration",
+     "growth",
+     "leadership"
+    ],
+    "spend": {
+     "cost": 7.6e-05,
+     "prompt_tokens": 1802,
+     "completion_tokens": 188,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "up",
+    "project_name": null,
+    "categories": [
+     "collaboration",
+     "growth",
+     "leadership"
+    ],
+    "spend": {
+     "cost": 7.6e-05,
+     "prompt_tokens": 1802,
+     "completion_tokens": 188,
+     "calls": 1
+    }
+   }
+  ],
+  "sep09-recon-clean": [
+   {
+    "mood": "up",
+    "project_name": "Ledger Reconciliation",
+    "categories": [
+     "wins"
+    ],
+    "spend": {
+     "cost": 7.9e-05,
+     "prompt_tokens": 1872,
+     "completion_tokens": 188,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "up",
+    "project_name": "Ledger Reconciliation",
+    "categories": [
+     "wins"
+    ],
+    "spend": {
+     "cost": 7.9e-05,
+     "prompt_tokens": 1872,
+     "completion_tokens": 188,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "up",
+    "project_name": "Ledger Reconciliation",
+    "categories": [
+     "wins"
+    ],
+    "spend": {
+     "cost": 7.9e-05,
+     "prompt_tokens": 1872,
+     "completion_tokens": 188,
+     "calls": 1
+    }
+   }
+  ],
+  "sep10-interviews": [
+   {
+    "mood": "down",
+    "project_name": null,
+    "categories": [
+     "leadership"
+    ],
+    "spend": {
+     "cost": 7.6e-05,
+     "prompt_tokens": 1800,
+     "completion_tokens": 183,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "down",
+    "project_name": null,
+    "categories": [
+     "leadership"
+    ],
+    "spend": {
+     "cost": 7.6e-05,
+     "prompt_tokens": 1800,
+     "completion_tokens": 183,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "down",
+    "project_name": null,
+    "categories": [
+     "leadership"
+    ],
+    "spend": {
+     "cost": 7.6e-05,
+     "prompt_tokens": 1800,
+     "completion_tokens": 183,
+     "calls": 1
+    }
+   }
+  ],
+  "sep14-quiet": [
+   {
+    "mood": "flat",
+    "project_name": null,
+    "categories": [
+     "collaboration"
+    ],
+    "spend": {
+     "cost": 7.6e-05,
+     "prompt_tokens": 1819,
+     "completion_tokens": 183,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "flat",
+    "project_name": null,
+    "categories": [
+     "collaboration"
+    ],
+    "spend": {
+     "cost": 7.6e-05,
+     "prompt_tokens": 1819,
+     "completion_tokens": 183,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "flat",
+    "project_name": null,
+    "categories": [
+     "collaboration"
+    ],
+    "spend": {
+     "cost": 7.6e-05,
+     "prompt_tokens": 1819,
+     "completion_tokens": 183,
+     "calls": 1
+    }
+   }
+  ],
+  "sep16-people": [
+   {
+    "mood": "down",
+    "project_name": null,
+    "categories": [
+     "collaboration",
+     "leadership"
+    ],
+    "spend": {
+     "cost": 8.2e-05,
+     "prompt_tokens": 1962,
+     "completion_tokens": 183,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "down",
+    "project_name": null,
+    "categories": [
+     "collaboration",
+     "leadership"
+    ],
+    "spend": {
+     "cost": 8.2e-05,
+     "prompt_tokens": 1962,
+     "completion_tokens": 183,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "down",
+    "project_name": null,
+    "categories": [
+     "collaboration",
+     "leadership"
+    ],
+    "spend": {
+     "cost": 8.2e-05,
+     "prompt_tokens": 1962,
+     "completion_tokens": 183,
+     "calls": 1
+    }
+   }
+  ],
+  "sep17-five-percent": [
+   {
+    "mood": "up",
+    "project_name": "Checkout Revamp",
+    "categories": [
+     "wins"
+    ],
+    "spend": {
+     "cost": 7.6e-05,
+     "prompt_tokens": 1815,
+     "completion_tokens": 185,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "up",
+    "project_name": "Checkout Revamp",
+    "categories": [
+     "wins"
+    ],
+    "spend": {
+     "cost": 7.6e-05,
+     "prompt_tokens": 1815,
+     "completion_tokens": 185,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "up",
+    "project_name": "Checkout Revamp",
+    "categories": [
+     "collaboration",
+     "wins"
+    ],
+    "spend": {
+     "cost": 7.6e-05,
+     "prompt_tokens": 1815,
+     "completion_tokens": 185,
+     "calls": 1
+    }
+   }
+  ],
+  "sep18-dashboard-p95": [
+   {
+    "mood": "up",
+    "project_name": "Merchant Dashboard",
+    "categories": [
+     "wins"
+    ],
+    "spend": {
+     "cost": 7.9e-05,
+     "prompt_tokens": 1889,
+     "completion_tokens": 184,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "up",
+    "project_name": "Merchant Dashboard",
+    "categories": [
+     "wins"
+    ],
+    "spend": {
+     "cost": 7.9e-05,
+     "prompt_tokens": 1889,
+     "completion_tokens": 184,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "up",
+    "project_name": "Merchant Dashboard",
+    "categories": [
+     "wins"
+    ],
+    "spend": {
+     "cost": 7.9e-05,
+     "prompt_tokens": 1889,
+     "completion_tokens": 184,
+     "calls": 1
+    }
+   }
+  ],
+  "sep21-double-charge": [
+   {
+    "mood": "down",
+    "project_name": "Checkout Revamp",
+    "categories": [
+     "challenges",
+     "growth"
+    ],
+    "spend": {
+     "cost": 7.9e-05,
+     "prompt_tokens": 1880,
+     "completion_tokens": 185,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "down",
+    "project_name": null,
+    "categories": [
+     "challenges",
+     "collaboration"
+    ],
+    "spend": {
+     "cost": 7.9e-05,
+     "prompt_tokens": 1880,
+     "completion_tokens": 185,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "down",
+    "project_name": "Checkout Revamp",
+    "categories": [
+     "challenges",
+     "collaboration",
+     "growth"
+    ],
+    "spend": {
+     "cost": 7.9e-05,
+     "prompt_tokens": 1880,
+     "completion_tokens": 185,
+     "calls": 1
+    }
+   }
+  ],
+  "sep22-fix-and-meeting": [
+   {
+    "mood": "down",
+    "project_name": null,
+    "categories": [
+     "collaboration",
+     "wins"
+    ],
+    "spend": {
+     "cost": 7.9e-05,
+     "prompt_tokens": 1891,
+     "completion_tokens": 183,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "down",
+    "project_name": null,
+    "categories": [
+     "collaboration",
+     "wins"
+    ],
+    "spend": {
+     "cost": 7.9e-05,
+     "prompt_tokens": 1891,
+     "completion_tokens": 183,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "down",
+    "project_name": null,
+    "categories": [
+     "collaboration",
+     "wins"
+    ],
+    "spend": {
+     "cost": 7.9e-05,
+     "prompt_tokens": 1891,
+     "completion_tokens": 183,
+     "calls": 1
+    }
+   }
+  ],
+  "sep23-postmortem": [
+   {
+    "mood": "up",
+    "project_name": null,
+    "categories": [
+     "wins"
+    ],
+    "spend": {
+     "cost": 7.6e-05,
+     "prompt_tokens": 1811,
+     "completion_tokens": 183,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "up",
+    "project_name": null,
+    "categories": [
+     "wins"
+    ],
+    "spend": {
+     "cost": 7.6e-05,
+     "prompt_tokens": 1811,
+     "completion_tokens": 183,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "up",
+    "project_name": null,
+    "categories": [
+     "wins"
+    ],
+    "spend": {
+     "cost": 7.6e-05,
+     "prompt_tokens": 1811,
+     "completion_tokens": 183,
+     "calls": 1
+    }
+   }
+  ],
+  "sep24-checkout-100": [
+   {
+    "mood": "up",
+    "project_name": "Checkout Revamp",
+    "categories": [
+     "wins"
+    ],
+    "spend": {
+     "cost": 7.7e-05,
+     "prompt_tokens": 1825,
+     "completion_tokens": 185,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "up",
+    "project_name": "Checkout Revamp",
+    "categories": [
+     "wins"
+    ],
+    "spend": {
+     "cost": 7.7e-05,
+     "prompt_tokens": 1825,
+     "completion_tokens": 185,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "up",
+    "project_name": "Checkout Revamp",
+    "categories": [
+     "wins"
+    ],
+    "spend": {
+     "cost": 7.7e-05,
+     "prompt_tokens": 1825,
+     "completion_tokens": 185,
+     "calls": 1
+    }
+   }
+  ],
+  "sep25-short": [
+   {
+    "mood": "flat",
+    "project_name": "Ledger Reconciliation",
+    "categories": [
+     "wins"
+    ],
+    "spend": {
+     "cost": 7.3e-05,
+     "prompt_tokens": 1744,
+     "completion_tokens": 188,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "flat",
+    "project_name": "Ledger Reconciliation",
+    "categories": [
+     "wins"
+    ],
+    "spend": {
+     "cost": 7.3e-05,
+     "prompt_tokens": 1744,
+     "completion_tokens": 188,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "flat",
+    "project_name": "Ledger Reconciliation",
+    "categories": [
+     "wins"
+    ],
+    "spend": {
+     "cost": 7.3e-05,
+     "prompt_tokens": 1744,
+     "completion_tokens": 188,
+     "calls": 1
+    }
+   }
+  ],
+  "sep27-sunday-nerves": [
+   {
+    "mood": "down",
+    "project_name": null,
+    "categories": [
+     "growth"
+    ],
+    "spend": {
+     "cost": 7.7e-05,
+     "prompt_tokens": 1845,
+     "completion_tokens": 183,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "down",
+    "project_name": null,
+    "categories": [
+     "challenges"
+    ],
+    "spend": {
+     "cost": 7.7e-05,
+     "prompt_tokens": 1845,
+     "completion_tokens": 183,
+     "calls": 1
+    }
+   },
+   {
+    "mood": "down",
+    "project_name": null,
+    "categories": [
+     "growth"
+    ],
+    "spend": {
+     "cost": 7.7e-05,
+     "prompt_tokens": 1845,
+     "completion_tokens": 183,
+     "calls": 1
+    }
+   }
+  ]
+ }
+}
