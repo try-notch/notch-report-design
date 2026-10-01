@@ -1,0 +1,45 @@
+# /etc/systemd/system/notch-dash.service — the monitoring dashboard, 127.0.0.1:4130 only.
+# Reached solely through `tailscale serve` (DEPLOY.md); no Caddy site serves it.
+[Unit]
+Description=Notch dashboard (notch_dash, 127.0.0.1:4130, tailnet only)
+After=network-online.target notch-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=notch
+Group=notch
+WorkingDirectory=/opt/notch/app
+# notch.env for OPENROUTER_API_KEY (key spend) and NOTCH_PORT (the health probe);
+# dash.env turns off the Mac-only sources and admits the tailnet.
+EnvironmentFile=/etc/notch/notch.env
+EnvironmentFile=/etc/notch/dash.env
+ExecStart=/opt/notch/venv/bin/python -m notch_dash
+Restart=on-failure
+RestartSec=2
+
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="referrer" content="no-referrer">
+<title>Notch stack</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="static/style.css">
+<script src="static/app.js" defer></script>
+</head>
+<body>
+<svg class="defs" aria-hidden="true" focusable="false">
+  <symbol id="g-ok" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7"/></symbol>
+  <symbol id="g-warn" viewBox="0 0 16 16"><path d="M8 1.2 15.4 14.6H.6Z"/></symbol>
+  <symbol id="g-critical" viewBox="0 0 16 16"><path d="M8 .6 15.4 8 8 15.4.6 8Z"/></symbol>
+  <symbol id="g-unknown" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.4" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></symbol>
+  <symbol id="g-busy" viewBox="0 0 48 48"><path d="M40 8C20 8 9 19 9 33c0 3 .7 5.6 1.9 7.8C15 30 23 24 35 21c-9 5-15 11-19 21c3 1.3 6 1.9 9 1.6C39 42 44 28 40 8Z"/></symbol>
+</svg>
+
+<header class="top">
+  <div class="wrap top-in">
+    <div class="overall" aria-live="polite" aria-atomic="true">
+      <h1 class="eyebrow">Notch stack</h1>
+      <p id="overall" class="word s-unknown"><svg class="g" aria-hidden="true"><use id="overall-glyph" href="#g-unknown"/></svg><span id="overall-word">Can’t tell yet</span></p>
+      <p id="overall-reason" class="lead">Reading every source…</p>
+    </div>
+    <p id="fresh" class="fresh">Reading…</p>
+  </div>
+</header>
+
+<main class="wrap">
+  <section id="notice" class="notice" hidden aria-labelledby="notice-title">
+    <svg class="g" aria-hidden="true"><use href="#g-critical"/></svg>
+    <div><h2 id="notice-title">Needs you now</h2><ul id="notice-list"></ul></div>
+  </section>
+
+  <section id="status" aria-labelledby="h-status">
+    <h2 id="h-status">Status</h2>
+    <div id="status-body" class="tiles">
+      <div class="tile"><div class="sk w40"></div><div class="sk"></div><div class="sk w60"></div></div>
+      <div class="tile"><div class="sk w40"></div><div class="sk"></div><div class="sk w60"></div></div>
+      <div class="tile"><div class="sk w40"></div><div class="sk"></div><div class="sk w60"></div></div>
+      <div class="tile"><div class="sk w40"></div><div class="sk"></div><div class="sk w60"></div></div>
+      <div class="tile"><div class="sk w40"></div><div class="sk"></div><div class="sk w60"></div></div>
+      <div class="tile"><div class="sk w40"></div><div class="sk"></div><div class="sk w60"></div></div>
+    </div>
+  </section>
+
+  <section id="notches" aria-labelledby="h-notches">
+    <h2 id="h-notches">Notches</h2>
+    <div id="notches-body" class="stack"><div class="card"><div class="sk w40"></div><div class="sk tall"></div><div class="sk tall"></div><div class="sk tall"></div></div></div>
+  </section>
+
+  <div class="split">
+    <div class="col">
+      <section id="traffic" aria-labelledby="h-traffic">
+        <h2 id="h-traffic">Traffic</h2>
+        <div id="traffic-body" class="stack"><div class="card"><div class="sk w60"></div><div class="sk chart"></div></div></div>
+      </section>
+      <section id="models" aria-labelledby="h-models">
+        <h2 id="h-models">Models</h2>
+        <div id="models-body" class="stack"><div class="card"><div class="sk w40"></div><div class="sk tall"></div></div></div>
+      </section>
+    </div>
+    <div class="col">
+      <section id="gate" aria-labelledby="h-gate">
+        <h2 id="h-gate">The gate</h2>
+        <div id="gate-body" class="stack"><div class="card"><div class="sk w40"></div><div class="sk"></div><div class="sk"></div></div></div>
+      </section>
+      <section id="record" aria-labelledby="h-record">
+        <h2 id="h-record">Your record</h2>
+        <div id="record-body" class="stack"><div class="card"><div class="sk w60"></div><div class="sk tall"></div></div></div>
+      </section>
+    </div>
+  </div>
+
+  <section id="errors" aria-labelledby="h-errors">
+    <h2 id="h-errors">Errors</h2>
+    <div id="errors-body" class="stack"><div class="card"><div class="sk w40"></div><div class="sk"></div></div></div>
+  </section>
+
+  <section id="sources" aria-labelledby="h-sources">
+    <h2 id="h-sources">Where this comes from</h2>
+    <div id="sources-body" class="stack"><div class="card"><div class="sk"></div><div class="sk"></div><div class="sk"></div></div></div>
+  </section>
+</main>
+</body>
+</html>
