@@ -9,7 +9,9 @@ This is **not production code**. It's a working thing to run in front of people.
 No frontend, no app — just a CLI.
 
 The server the iOS app talks to — the same pipeline behind the contract in
-`notch-ios-dev` — lives in `notch_api/`; see [SERVER.md](SERVER.md).
+`notch-ios-dev` — lives in `notch_api/`; see [SERVER.md](SERVER.md). Read
+[CONTRIBUTING.md](CONTRIBUTING.md) before changing either: it says which is which,
+which branch to start from, and what to run.
 
 ---
 
