@@ -295,3 +295,12 @@ Near-synonym pairs (`migration docs` / `migration documentation`,
 `knowledge sharing` / `knowledge transfer`) largely collapsed. This has no
 formal eval yet and needs its own metric — the honest one is probably search
 recall, not vocabulary size.
+
+**Update:** the auto tags now have their own harness, `eval_auto_tags.py`. It
+runs the shipped tagger over the three persona CSVs in `sample_data/` — cold
+entries the prompt was never tuned on — forward and reversed, and stores
+results in the `auto_tag_review` table for human labelling. First findings:
+reuse rate 32–47%, singleton rate ~60%, and forward-vs-reversed agreement of
+only **0.17–0.24 mean Jaccard** — tag choice is dominated by which keywords
+happened to exist when the entry arrived, which is the drift problem measured
+directly rather than inferred from vocabulary size.

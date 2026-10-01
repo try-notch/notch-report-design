@@ -28,6 +28,8 @@ written.
 - `[built]` Store the transcript verbatim and permanently — everything else is
   derived from it, and the raw text is never overwritten
 - `[partial]` Tag each entry (see **Tagging** below)
+- `[built]` Let the user correct an entry's fixed tags, and keep both the
+  model's prediction and the correction (see **Tag provenance** below)
 - `[planned]` Extract a summary and key bullet points for what the user did
   that day
 - `[partial]` Match the entry to one of the user's active projects, with the
@@ -61,6 +63,30 @@ separately.
 Both layers come from the same model call at capture time. Quality of the
 auto tags is expected to need eval work; the fixed tags are the reliable spine
 that reports are built on regardless.
+
+### Tag provenance
+
+The model's guess is not the last word. The user can change an entry's fixed
+tags, and the storage is shaped around two rules that follow from that:
+
+**A correction is permanent.** Nothing automated overwrites it — not a
+re-tagging pass, not a prompt upgrade, not a backfill. `entries.tags_source`
+records whether the current tags came from `seed`, `model`, or `user`, and
+`db.set_model_tags` will only fill `tags` when an entry has none.
+
+**The prediction survives the correction.** `entries.model_tags` keeps what the
+tagger said, stamped with the prompt variant in `entries.tagged_variant`. An
+overwritten prediction is a labelled example destroyed.
+
+Every user edit is appended to the `tag_edits` table with the old value, the
+new value, and the model's prediction frozen at edit time. That log is the
+point of the whole arrangement: per TAGGING_EVAL.md, the measured 73.1% is an
+in-sample number and the missing piece is a holdout the prompt author never
+read. Corrections made in the app are exactly that, and they arrive
+continuously and for free.
+
+`entries.tags` remains the single effective value. Charts, reports, and filters
+read it and never have to reason about where it came from.
 
 ---
 

@@ -21,10 +21,16 @@ Why the data is shaped the way it is (this matters — the reports depend on it)
 Run it with:  python seed_db.py
 """
 
+import argparse
+import csv
 import os
 import sqlite3
+import sys
 from collections import Counter
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "notch.db")
 
@@ -33,15 +39,17 @@ TAGS = ["wins", "collaboration", "leadership", "growth", "challenges"]
 
 PROJECT_NAME = "Front-End Refactor"
 
-# The project runs from 56 days ago to 17 days ago — about 5.5 weeks, sitting in
-# the middle of the 90-day range so it's clearly bounded on both sides.
-PROJECT_START_DAYS_AGO = 56
-PROJECT_END_DAYS_AGO = 17
+# The project's entries run from ~56 to ~17 days ago — about 5.5 weeks, sitting
+# in the middle of the 90-day range so it's clearly bounded on both sides. Its
+# start and end dates are DERIVED from those entries rather than declared here,
+# which is the same rule a CSV import follows: a project spans the first and
+# last entry attached to it.
 
 SCHEMA = """
 DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS projects;
 DROP TABLE IF EXISTS entries;
+DROP TABLE IF EXISTS tag_edits;
 
 CREATE TABLE users (
     id INTEGER PRIMARY KEY,
@@ -62,13 +70,41 @@ CREATE TABLE entries (
     user_id INTEGER,
     entry_date TEXT,        -- ISO date
     raw_text TEXT,          -- the "voice journal" text, written as if transcribed from speech
-    tags TEXT,              -- comma-separated: wins, collaboration, leadership, growth, challenges
+    tags TEXT,              -- comma-separated: wins, collaboration, leadership, growth, challenges.
+                            -- The EFFECTIVE tags — whoever set them. Charts and reports read this.
     auto_tags TEXT,         -- comma-separated open-vocabulary keywords, filled in by tagger.py.
                             -- NULL until tagged. Never feeds a chart — see Backend.md.
     project_id INTEGER,     -- nullable, FK to projects
     acknowledged_by TEXT,   -- nullable — who recognized this, if anyone
-    impact_note TEXT        -- nullable — a short, specific stated impact/result
+    impact_note TEXT,       -- nullable — a short, specific stated impact/result
+
+    -- Tag provenance. `tags` says what to believe; these say where it came from.
+    -- Kept apart so a user's correction survives every automated pass, and so
+    -- the model's original guess survives the correction.
+    model_tags TEXT,        -- what tagger.py predicted. NULL until it has run.
+    tags_source TEXT,       -- 'seed' | 'model' | 'user' — who set `tags`
+    tags_edited_at TEXT,    -- ISO timestamp of the last user edit, NULL if never
+    tagged_variant TEXT     -- prompt variant that produced model_tags
 );
+
+-- Append-only log of the corrections people make in the app. Its real job is
+-- eval data: entries no prompt author ever read, labelled by someone with no
+-- interest in the score. See TAGGING_EVAL.md on why that's the missing piece.
+--
+-- model_value and variant are copied in rather than joined, so a later
+-- re-tagging pass overwriting entries.model_tags can't rewrite the history of
+-- what was actually corrected.
+CREATE TABLE tag_edits (
+    id INTEGER PRIMARY KEY,
+    entry_id INTEGER NOT NULL,
+    field TEXT NOT NULL,        -- 'tags' today; project_id and auto_tags later
+    old_value TEXT,             -- comma-separated, as stored on the entry
+    new_value TEXT,
+    model_value TEXT,           -- what the model had predicted, frozen at edit time
+    variant TEXT,               -- the prompt variant that produced model_value
+    edited_at TEXT NOT NULL     -- ISO timestamp
+);
+CREATE INDEX idx_tag_edits_entry ON tag_edits (entry_id);
 """
 
 # ---------------------------------------------------------------------------
@@ -373,75 +409,352 @@ ENTRIES = [
 ]
 
 
-def seed():
-    """Wipe and rebuild notch.db from the ENTRIES table above."""
-    today = date.today()
+# ---------------------------------------------------------------------------
+# RECORDS — the one shape everything is built from.
+#
+# The built-in fixture above and an imported CSV are different sources for the
+# same thing, so both are normalised into a list of these dicts before anything
+# touches SQLite. That way validation, project derivation, insertion and the
+# summary are written once and behave identically whichever source you used.
+#
+#   {"entry_date": "2026-07-14",  # ISO
+#    "raw_text": "...",
+#    "tags": ["wins", "growth"],  # may be empty
+#    "auto_tags": [],             # normally empty; tagger.py fills it
+#    "project": "Front-End Refactor" or None,
+#    "acknowledged_by": "Priya" or None,
+#    "impact_note": "..." or None}
+# ---------------------------------------------------------------------------
 
+CSV_COLUMNS = [
+    "entry_date", "raw_text", "tags", "project", "acknowledged_by",
+    "impact_note", "auto_tags",
+]
+CSV_REQUIRED = ["entry_date", "raw_text"]
+
+
+class CSVError(Exception):
+    """One or more rows failed validation. Carries every problem, not just the first."""
+
+    def __init__(self, problems):
+        self.problems = problems
+        super().__init__(f"{len(problems)} problem(s) in the CSV")
+
+
+def _fixture_records():
+    """The built-in 90-day demo data, as records.
+
+    Dates are generated relative to today so 'Last 7 Days' always has content —
+    that property is why the fixture stores days-ago rather than real dates.
+    """
+    today = date.today()
+    records = []
+    for days_ago, raw_text, tags, is_project, acknowledged_by, impact_note in ENTRIES:
+        records.append({
+            "entry_date": (today - timedelta(days=days_ago)).isoformat(),
+            "raw_text": raw_text,
+            "tags": [t.strip() for t in tags.split(",") if t.strip()],
+            "auto_tags": [],
+            "project": PROJECT_NAME if is_project else None,
+            "acknowledged_by": acknowledged_by,
+            "impact_note": impact_note,
+        })
+    return records
+
+
+def _split(value):
+    return [v.strip().lower() for v in (value or "").split(",") if v.strip()]
+
+
+def read_csv(path):
+    """
+    Parse and validate a CSV into records. Raises CSVError listing every problem.
+
+    Validation is all-or-nothing on purpose: the database is dropped and rebuilt,
+    so a half-valid import that partially succeeded would leave you worse off
+    than before. Nothing is written until every row passes.
+    """
+    # utf-8-sig strips the byte-order mark Excel writes, which otherwise turns
+    # the first header into '﻿entry_date' and makes a valid file look like
+    # it's missing its required column.
+    with open(path, newline="", encoding="utf-8-sig") as fh:
+        reader = csv.DictReader(fh)
+        if reader.fieldnames is None:
+            raise CSVError(["the file is empty"])
+
+        headers = [h.strip() for h in reader.fieldnames]
+        problems, warnings = [], []
+
+        missing = [c for c in CSV_REQUIRED if c not in headers]
+        if missing:
+            raise CSVError([
+                f"missing required column(s): {', '.join(missing)}. "
+                f"Expected some of: {', '.join(CSV_COLUMNS)}"
+            ])
+
+        # An extra column is a warning, not an error — people keep their own
+        # notes alongside the data, and refusing the file over a column we
+        # simply don't read would be obnoxious.
+        unknown = [h for h in headers if h not in CSV_COLUMNS]
+        if unknown:
+            warnings.append(f"ignoring unrecognised column(s): {', '.join(unknown)}")
+
+        records = []
+        for line, row in enumerate(reader, start=2):  # start=2: row 1 is the header
+            row = {k.strip(): (v or "").strip() for k, v in row.items() if k}
+
+            raw_text = row.get("raw_text", "")
+            if not raw_text:
+                problems.append(f"row {line}: raw_text is empty")
+
+            entry_date = row.get("entry_date", "")
+            try:
+                # Strict ISO. Slash formats are rejected rather than guessed at,
+                # because 03/04/2026 is March in one country and April in another
+                # and silently picking one is worse than refusing.
+                parsed = datetime.strptime(entry_date, "%Y-%m-%d").date()
+            except ValueError:
+                problems.append(
+                    f"row {line}: entry_date {entry_date!r} is not YYYY-MM-DD"
+                )
+                parsed = None
+
+            tags = _split(row.get("tags"))
+            for tag in tags:
+                if tag not in TAGS:
+                    problems.append(
+                        f"row {line}: unknown tag {tag!r} — must be one of {', '.join(TAGS)}"
+                    )
+
+            records.append({
+                "entry_date": parsed.isoformat() if parsed else None,
+                "raw_text": raw_text,
+                "tags": tags,
+                "auto_tags": _split(row.get("auto_tags")),
+                "project": row.get("project") or None,
+                "acknowledged_by": row.get("acknowledged_by") or None,
+                "impact_note": row.get("impact_note") or None,
+            })
+
+    if not records:
+        problems.append("no data rows — the file has a header and nothing else")
+    if problems:
+        raise CSVError(problems)
+    return records, warnings
+
+
+def shift_to_today(records):
+    """
+    Slide every date forward so the newest entry lands on today, preserving gaps.
+
+    A CSV carries real dates, and a report window like 'Last 7 Days' is relative
+    to when you run it — so an export from three months ago produces an empty
+    weekly report and looks broken. This makes an old file demo-able without
+    editing it.
+    """
+    dates = [datetime.strptime(r["entry_date"], "%Y-%m-%d").date() for r in records]
+    offset = date.today() - max(dates)
+    for record, original in zip(records, dates):
+        record["entry_date"] = (original + offset).isoformat()
+    return records
+
+
+def build(records, user_name, user_role):
+    """Drop and rebuild notch.db from records. Projects are derived from names."""
     conn = sqlite3.connect(DB_PATH)
     conn.executescript(SCHEMA)
+    conn.execute("INSERT INTO users (id, name, role) VALUES (?, ?, ?)",
+                 (1, user_name, user_role))
 
-    conn.execute(
-        "INSERT INTO users (id, name, role) VALUES (?, ?, ?)",
-        (1, "Jordan Kim", "Software Engineer"),
-    )
+    # A project's span is the first and last entry attached to it. There's no
+    # separate projects CSV because the dates are already implied by the entries,
+    # and a hand-maintained second file would only drift from them.
+    spans = {}
+    for record in records:
+        if record["project"]:
+            dates = spans.setdefault(record["project"], [])
+            dates.append(record["entry_date"])
 
-    project_start = today - timedelta(days=PROJECT_START_DAYS_AGO)
-    project_end = today - timedelta(days=PROJECT_END_DAYS_AGO)
-    conn.execute(
-        "INSERT INTO projects (id, user_id, name, start_date, end_date) VALUES (?, ?, ?, ?, ?)",
-        (1, 1, PROJECT_NAME, project_start.isoformat(), project_end.isoformat()),
-    )
+    project_ids = {}
+    for index, (name, dates) in enumerate(sorted(spans.items()), start=1):
+        project_ids[name] = index
+        conn.execute(
+            "INSERT INTO projects (id, user_id, name, start_date, end_date) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (index, 1, name, min(dates), max(dates)),
+        )
 
-    for days_ago, raw_text, tags, is_project, acknowledged_by, impact_note in ENTRIES:
-        entry_date = today - timedelta(days=days_ago)
+    for record in records:
         conn.execute(
             """INSERT INTO entries
-               (user_id, entry_date, raw_text, tags, project_id, acknowledged_by, impact_note)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+               (user_id, entry_date, raw_text, tags, auto_tags, project_id,
+                acknowledged_by, impact_note, tags_source)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'seed')""",
             (
                 1,
-                entry_date.isoformat(),
-                raw_text,
-                tags,
-                1 if is_project else None,
-                acknowledged_by,
-                impact_note,
+                record["entry_date"],
+                record["raw_text"],
+                ",".join(record["tags"]),
+                ",".join(record["auto_tags"]) or None,
+                project_ids.get(record["project"]),
+                record["acknowledged_by"],
+                record["impact_note"],
             ),
         )
 
     conn.commit()
+    conn.close()
+    return project_ids
 
-    # ---- Print a summary so you can sanity-check the data before demoing ----
+
+def summarise(records, project_ids, user_name, user_role):
+    """Print enough to sanity-check the data before demoing on it."""
     tag_counts = Counter()
-    for _, _, tags, _, _, _ in ENTRIES:
-        tag_counts.update(t.strip() for t in tags.split(","))
+    for record in records:
+        tag_counts.update(record["tags"])
 
-    acknowledged = sum(1 for e in ENTRIES if e[4])
-    project_entries = sum(1 for e in ENTRIES if e[3])
-    oldest = today - timedelta(days=max(e[0] for e in ENTRIES))
-    newest = today - timedelta(days=min(e[0] for e in ENTRIES))
+    dates = sorted(r["entry_date"] for r in records)
+    acknowledged = sum(1 for r in records if r["acknowledged_by"])
+    untagged = sum(1 for r in records if not r["tags"])
+    tagged = sum(1 for r in records if r["auto_tags"])
+    recent = sum(1 for r in records
+                 if r["entry_date"] >= (date.today() - timedelta(days=6)).isoformat())
 
     print()
     print("  Seeded notch.db")
     print("  " + "-" * 52)
-    print(f"  User            Jordan Kim (Software Engineer)")
-    print(f"  Entries         {len(ENTRIES)}")
-    print(f"  Date range      {oldest.isoformat()} to {newest.isoformat()}")
-    print(f"  Project         {PROJECT_NAME} "
-          f"({project_start.isoformat()} to {project_end.isoformat()}, {project_entries} entries)")
-    print(f"  Acknowledged    {acknowledged} entries ({acknowledged * 100 // len(ENTRIES)}%)")
+    print(f"  User            {user_name} ({user_role})")
+    print(f"  Entries         {len(records)}")
+    print(f"  Date range      {dates[0]} to {dates[-1]}")
+    for name in sorted(project_ids):
+        spans = [r["entry_date"] for r in records if r["project"] == name]
+        print(f"  Project         {name} "
+              f"({min(spans)} to {max(spans)}, {len(spans)} entries)")
+    if not project_ids:
+        print("  Project         none")
+    print(f"  Acknowledged    {acknowledged} entries "
+          f"({acknowledged * 100 // len(records)}%)")
+
     print()
     print("  Tag counts")
     for tag in TAGS:
-        bar = "#" * tag_counts[tag]
-        print(f"    {tag:<14} {tag_counts[tag]:>3}  {bar}")
+        print(f"    {tag:<14} {tag_counts[tag]:>3}  {'#' * tag_counts[tag]}")
+    if untagged:
+        print(f"    {'(untagged)':<14} {untagged:>3}")
+
     print()
     print(f"  Database written to {DB_PATH}")
-    print("  Auto tags are empty — run  python tagger.py  to fill them in.")
+    if not tagged:
+        print("  Auto tags are empty — run  python tagger.py  to fill them in.")
+    # The weekly report is relative to the day you run it, so an import of older
+    # entries produces an empty one. Say so here rather than letting it surprise
+    # someone mid-demo.
+    if recent == 0:
+        print("  ⚠ No entries in the last 7 days — the last7days report will be")
+        print("    empty. Re-import with --shift-dates to slide the range forward.")
     print()
 
-    conn.close()
+
+def write_template(path):
+    """Write a CSV with the expected header and two example rows."""
+    today = date.today()
+    with open(path, "w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=CSV_COLUMNS)
+        writer.writeheader()
+        writer.writerow({
+            "entry_date": (today - timedelta(days=1)).isoformat(),
+            "raw_text": "Paired with Nina on her first real feature. Mostly sat "
+                        "there while she drove and answered questions.",
+            "tags": "collaboration,leadership",
+            "project": "Front-End Refactor",
+            "acknowledged_by": "",
+            "impact_note": "",
+            "auto_tags": "",
+        })
+        writer.writerow({
+            "entry_date": today.isoformat(),
+            "raw_text": "Shipped the export rewrite behind a flag. Rolled it out "
+                        "to 10% and watched the dashboards for an hour.",
+            "tags": "wins",
+            "project": "",
+            "acknowledged_by": "Priya",
+            "impact_note": "Export rewrite live for 10% of traffic",
+            "auto_tags": "",
+        })
+
+    print()
+    print(f"  Wrote {path}")
+    print(f"  Required columns: {', '.join(CSV_REQUIRED)}")
+    print(f"  Optional columns: {', '.join(c for c in CSV_COLUMNS if c not in CSV_REQUIRED)}")
+    print("  Dates must be YYYY-MM-DD. tags is comma-separated and must use:")
+    print(f"    {', '.join(TAGS)}")
+    print("  Leave tags empty to import entries unlabelled.")
+    print()
+
+
+def seed():
+    """Wipe and rebuild notch.db from the built-in fixture."""
+    records = _fixture_records()
+    project_ids = build(records, "Jordan Kim", "Software Engineer")
+    summarise(records, project_ids, "Jordan Kim", "Software Engineer")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Build notch.db, from the built-in demo data or from a CSV.",
+        epilog="With no arguments, rebuilds the built-in 90-day demo dataset.",
+    )
+    parser.add_argument("--csv", metavar="PATH",
+                        help="Import entries from a CSV instead of the built-in data.")
+    parser.add_argument("--template", metavar="PATH",
+                        help="Write an example CSV with the expected columns and exit.")
+    parser.add_argument("--shift-dates", action="store_true",
+                        help="Slide imported dates so the newest entry is today, "
+                             "keeping the gaps between them.")
+    parser.add_argument("--user-name", default="Jordan Kim",
+                        help="Name for the imported user. Default: Jordan Kim")
+    parser.add_argument("--user-role", default="Software Engineer",
+                        help="Job title for the imported user. Default: Software Engineer")
+    args = parser.parse_args()
+
+    if args.template:
+        write_template(args.template)
+        return 0
+
+    if not args.csv:
+        if args.shift_dates:
+            parser.error("--shift-dates only applies to --csv "
+                         "(the built-in data is already relative to today)")
+        seed()
+        return 0
+
+    if not os.path.exists(args.csv):
+        print(f"\n  ✗  No such file: {args.csv}")
+        print(f"     Generate one to start from:  python seed_db.py --template entries.csv\n")
+        return 1
+
+    try:
+        records, warnings = read_csv(args.csv)
+    except CSVError as exc:
+        print(f"\n  ✗  {args.csv} was not imported — {len(exc.problems)} problem(s):")
+        for problem in exc.problems[:15]:
+            print(f"       {problem}")
+        if len(exc.problems) > 15:
+            print(f"       ...and {len(exc.problems) - 15} more")
+        print("\n     Nothing was written. The existing database is untouched.\n")
+        return 1
+
+    for warning in warnings:
+        print(f"\n  ⚠ {warning}")
+
+    if args.shift_dates:
+        shift_to_today(records)
+
+    records.sort(key=lambda r: r["entry_date"])
+    project_ids = build(records, args.user_name, args.user_role)
+    summarise(records, project_ids, args.user_name, args.user_role)
+    return 0
 
 
 if __name__ == "__main__":
-    seed()
+    sys.exit(main())

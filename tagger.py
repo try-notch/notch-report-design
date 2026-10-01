@@ -31,11 +31,17 @@ Both come from this one call. See Backend.md for the full rule.
 
 WHAT GETS WRITTEN
 -----------------
-This only writes `auto_tags`, leaving the fixed tags alone. In this demo the
-fixed tags were written by hand in seed_db.py, which makes them a usable ground
-truth — so eval_tags.py scores the model's fixed-tag predictions against them
-without touching a row. Scoring lives there, not here: this file is product
-code, that one is the measuring instrument. See TAGGING_EVAL.md.
+`auto_tags`, and the predicted fixed tags into `model_tags` — stamped with the
+prompt variant that produced them, because an unversioned prediction can't be
+attributed later.
+
+The live `tags` column is left alone on every entry that already has one. In
+this demo those were written by hand in seed_db.py, which makes them a usable
+ground truth — so eval_tags.py scores the model's predictions against them
+without touching a row. In production the same rule protects a user's own
+corrections. db.set_model_tags owns that decision; see the promotion rule
+there. Scoring lives in eval_tags.py, not here: this file is product code, that
+one is the measuring instrument. See TAGGING_EVAL.md.
 """
 
 import argparse
@@ -164,7 +170,8 @@ def _clean_auto_tags(raw):
     return cleaned[:MAX_AUTO_TAGS]
 
 
-def tag_entry(client, raw_text, project_names, vocabulary=(), system_prompt=None):
+def tag_entry(client, raw_text, project_names, vocabulary=(), system_prompt=None,
+              temperature=0):
     """
     The call itself: one raw transcript in, one labelled object out.
 
@@ -180,6 +187,10 @@ def tag_entry(client, raw_text, project_names, vocabulary=(), system_prompt=None
 
     `system_prompt` defaults to SYSTEM_PROMPT and exists so eval_tags.py can run
     a variant against the same entries without editing this file.
+
+    `temperature` defaults to 0 — product behavior, one most-likely answer.
+    eval_confidence.py raises it to sample the answer DISTRIBUTION instead;
+    nothing in the product path should ever pass this.
     """
     tool = {
         "name": "label_entry",
@@ -203,7 +214,7 @@ def tag_entry(client, raw_text, project_names, vocabulary=(), system_prompt=None
         # distribution. It also makes the eval reproducible — at the default
         # temperature the same prompt scores differently run to run, which makes
         # a 2-point movement impossible to read.
-        temperature=0,
+        temperature=temperature,
         tools=[tool],
         tool_choice={"type": "tool", "name": "label_entry"},
         messages=[{"role": "user", "content": message}],
@@ -276,6 +287,11 @@ def backfill(entries, project_names, existing_vocabulary=(), dry_run=False):
 
                 if not dry_run:
                     db.set_auto_tags(entry["id"], result["auto_tags"])
+                    # Records the fixed-tag prediction and the prompt that made
+                    # it. Only promotes it to the live `tags` when the entry has
+                    # none — it will not overwrite seeded ground truth or a
+                    # correction someone made in the app.
+                    db.set_model_tags(entry["id"], result["tags"], WINNING_VARIANT)
 
                 print(f"  {DIM}[{entry['date_display']}]{RESET} "
                       f"{', '.join(result['auto_tags']) or DIM + '(none)' + RESET}")
