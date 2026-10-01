@@ -140,7 +140,7 @@ function problems(u) {
         [when(x.last_at), 'num', { 'data-l': 'last' }]]))
       : empty('Nothing’s gone wrong in the last 7 days.'),
     p.some(x => x.outcome === 'turned_away') && fact('Turned away: answered before processing began (sign-in, app version, a switch, unreadable audio), so no account is recorded.'),
-    u.probes_7d > 0 && fact(`Not listed: ${count(u.probes_7d, 'request')} to paths that don’t exist.`)];
+    u.probes_7d > 0 && fact(`Not listed: ${count(u.probes_7d, 'request')} to paths or methods the API doesn’t have.`)];
 }
 
 // ---- Models: one row a model, with who served it

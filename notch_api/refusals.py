@@ -17,16 +17,15 @@ COUNTED IN MEMORY, WRITTEN IN BATCHES. note() only adds to a dict, so it costs a
 request nothing and cannot fail it; a thread writes the dict to the meter every
 `interval` seconds in one transaction (Meter.count_refusals), and once more at shutdown.
 Writing per request would hand anyone without a token one SQLite commit per request,
-against the same write lock every real call's metering needs. A write that fails keeps
-its counts for the next one; a process killed outright loses at most `interval` seconds.
+against the same write lock every real call's metering needs. A write that fails, for
+whatever reason, keeps its counts for the next one and is logged; a process killed
+outright loses at most `interval` seconds.
 """
 
 import logging
 import re
 import threading
 import time
-
-from .wire_v2 import Refusal
 
 log = logging.getLogger(__name__)
 
@@ -63,12 +62,12 @@ class RefusalCounter:
             log.error("refusal_not_counted")
 
     def flush(self):
-        """Write what has been counted since the last write; on failure, keep it for the next."""
+        """Write what has been counted since the last write; on failure, keep it for the next. Never raises."""
         with self._lock:
             counts, self._counts = self._counts, {}
         try:
             self.meter.count_refusals(counts)
-        except (Refusal, OSError):
+        except Exception:  # noqa: BLE001 — a file that will not open is a bare sqlite3 error, not the meter's Refusal
             with self._lock:
                 for key, (calls, last_at) in counts.items():
                     held, at = self._counts.get(key, (0, last_at))
@@ -83,13 +82,10 @@ class RefusalCounter:
 
     def _run(self):
         while not self._stop.wait(self.interval):
-            try:
-                self.flush()
-            except Exception:  # noqa: BLE001 — whatever went wrong, the next write still gets its turn
-                log.error("refusals_not_written")
+            self.flush()
 
     def stop(self):
-        """Stop the thread and write whatever is left."""
+        """Stop the thread and write whatever is left. It never raises: the rest of shutdown follows it."""
         self._stop.set()
         if self._thread is not None:
             self._thread.join(timeout=5)

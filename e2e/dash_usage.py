@@ -50,6 +50,12 @@ EVERY WAY THIS CAN GO WRONG, written before the code. Each is a check below, by 
   F25 The link to the health page is shown where that page has nothing to show.
   F26 Watching the usage page makes the dashboard knock on /healthz every two seconds.
 
+ Found by a second reader, after the first version
+  F35 A 404 that is a real route's own answer (Notch Cloud's keycheck before a key is set up) is
+      shown as a probe, or as a problem.
+  F36 The meter's file cannot be opened when the counter writes: the batch is lost, or stopping
+      the server raises and the rest of shutdown never runs.
+
  The page
   F27 An empty meter breaks the page.
   F28 A provider's name reaches the DOM as markup.
@@ -100,6 +106,7 @@ from notch_api.fakes import (  # noqa: E402
     FakeApple, FakeAudio, FakeClient, FakeSupabaseAdmin, _BoundFake, fake_recording)
 from notch_api.meter import Meter  # noqa: E402
 from notch_api.openrouter import ModelUnavailable  # noqa: E402
+from notch_api.refusals import RefusalCounter  # noqa: E402
 from notch_api.services import Services  # noqa: E402
 from notch_api.zdr import ZdrAuditor  # noqa: E402
 from notch_dash import app as dash_app, usage as dash_usage  # noqa: E402
@@ -411,6 +418,8 @@ def trouble(s):
            "rewrites off")
     answers.append(s.call("POST", "/v2/takeaways", json_body=body, expect=503))
     s.push({"prompts": {"analyze": "v5", "takeaways": "v5", "check": "c1"}}, "rewrites back on")
+    # Not a refusal at all: Notch Cloud's keycheck answers 404 until the account sets a key up.
+    answers.append(s.call("GET", "/v2/cloud/keycheck", expect=404))
     # Probes: paths that do not exist, and a method a real path does not take.
     for method, path, status in (("GET", "/wp-login.php", 404), ("GET", "/.env", 404),
                                  ("POST", f"/v2/{CANARY.replace(' ', '-')}", 404), ("GET", "/v2/transcribe", 405)):
@@ -665,6 +674,10 @@ def numbers(check, s, u, text):
           u["probes_7d"] == 4 and not any(p["code"] in ("not_found", "method_not_allowed") for p in u["problems"])
           and [r for r in rows if r[0] == "unmatched" or r[1] == 405] == [
               ("/v2/transcribe", 405, "method_not_allowed", 1), ("unmatched", 404, "not_found", 3)], rows)
+    check("F35", "a real route's 404 is counted in the meter, and is neither a probe nor a problem on the page",
+          ("/v2/cloud/keycheck", 404, "not_found", 1) in rows and u["probes_7d"] == 4
+          and not [p for p in u["problems"] if p["code"] == "not_found" or p["where"].startswith("/v2/cloud")]
+          and "not found" not in " ".join(a["text"] for a in u["attention"]), sorted(problems))
     leaks = [name for name, needle in (("the canary", CANARY), ("a canary word", "walrus"), ("account A", A),
                                        ("account B", B), *((f"key {k[:8]}", k) for k in s.keys))
              if needle.lower() in text.lower() or needle.lower() in json.dumps(rows).lower()]
@@ -843,6 +856,24 @@ def part_two(check, s, browser, out, shot=True):
           and not [p for p in before["problems"] if p["outcome"] == "turned_away"], before.get("error"))
     Meter(old, clock=s.clock).count_refusals({(int(s.clock() // 3600) * 3600, "/v2/analyze", 401, "unauthorized"):
                                               (1, s.clock())})
+    # A counter whose meter's folder is gone when it writes, then back.
+    folder = os.path.join(s.work, "gone")
+    os.makedirs(folder)
+    counter = RefusalCounter(Meter(os.path.join(folder, "meter.db"), clock=s.clock), clock=s.clock)
+    counter.note({"status": 401, "route": "/v2/analyze", "error_code": "unauthorized"})
+    shutil.rmtree(folder)
+    try:
+        counter.stop()
+        raised = None
+    except Exception as exc:  # noqa: BLE001
+        raised = type(exc).__name__
+    os.makedirs(folder)
+    Meter(os.path.join(folder, "meter.db"), clock=s.clock)
+    counter.flush()
+    with sqlite3.connect(os.path.join(folder, "meter.db")) as db:
+        kept = db.execute("SELECT sum(calls) FROM refusals").fetchone()[0]
+    check("F36", "a write that cannot open the meter raises nothing and keeps its counts for the next one",
+          raised is None and kept == 1, (raised, kept))
     with sqlite3.connect(old) as db:
         names = {row[0] for row in db.execute("SELECT name FROM sqlite_master")}
         events = db.execute("SELECT count(*) FROM usage_events").fetchone()[0]

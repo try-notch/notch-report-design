@@ -23,8 +23,10 @@ MONEY IS SUMMED, THEN ROUNDED ONCE, so seven days can never come out above all t
 
 PROBLEMS HAVE THREE SOURCES: a call that started and failed, a call the meter refused (a limit,
 a reused key), and a call turned away before the meter saw it (`refusals`: no token, an app
-too old, a switch that is off, unreadable audio). Requests to paths that do not exist are
-probes: one count, never a row. A meter from before `refusals` existed reads as having none.
+too old, a switch that is off, unreadable audio). A request to a path that does not exist, or
+with a method its path does not take, is a probe: one count, never a row. A 404 from a real
+route is neither: it is that route's answer (Notch Cloud's keycheck says it until a key is
+set up). A meter from before `refusals` existed reads as having none.
 
 Every query is bounded to the last few weeks or counts rows by an indexed column, and a read
 is cached for CACHE_S seconds, so a page left open costs the server one small read every few
@@ -51,7 +53,7 @@ P95_FROM = 20      # calls before a p95 says anything
 ROWS = 100_000     # the most rows one aggregate reads into Python
 DAY, HOUR = 86400, 3600
 KINDS = {"transcribe": "notches", "analyze": "analyses", "takeaways": "rewrites", "reports": "reports"}
-PROBES = ("not_found", "method_not_allowed")   # with these codes, or on no route, a refusal is a probe
+NO_ROUTE = "unmatched"   # refusals.py's route for a request the router matched to nothing
 AUDITED = {"transcribe": ("recording", "transcribed"), "analyze": ("write-up", "classified")}
 
 _cache = {}
@@ -172,8 +174,8 @@ def _snapshot(db, now):
     if one("SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'refusals'"):
         refusals = rows("SELECT hour, route, status, code, calls, last_at FROM refusals WHERE hour >= ? LIMIT ?",
                         int(_midnight(oldest)), ROWS)
-    probes = [r for r in refusals if r[1] == "unmatched" or r[3] in PROBES]
-    turned = [r for r in refusals if not (r[1] == "unmatched" or r[3] in PROBES)]
+    probes = [r for r in refusals if r[1] == NO_ROUTE or r[3] == "method_not_allowed"]
+    turned = [r for r in refusals if r[1] != NO_ROUTE and r[3] not in ("method_not_allowed", "not_found")]
     week_from = _midnight(since)
 
     # -- accounts ---------------------------------------------------------------------------
