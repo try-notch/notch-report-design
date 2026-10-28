@@ -150,8 +150,21 @@ NOTCH_ENV=dev NOTCH_HOST_PORT=4175 docker compose up --build
 - the meter database and the metadata-only metrics sit in the `meter` volume;
 - it's capped at 3 GB of memory.
 
-Roll back by checking out the previous commit and running `docker compose up -d --build`
-again. The volume keeps the database.
+**Deploying a change** is step 2's `rsync` and step 3's `sudo docker compose up -d --build`. The
+build installs exactly the versions pinned in `requirements-server.txt`. First keep the image
+that's running, so there is one to go back to:
+```bash
+ssh ubuntu@<vps> 'sudo docker tag notch-api:latest notch-api:previous'
+```
+
+**Roll back** by putting that image back:
+```bash
+ssh ubuntu@<vps> 'sudo docker tag notch-api:previous notch-api:latest && cd notch && sudo docker compose up -d --force-recreate --wait'
+```
+Then rsync the older commit's files into `notch/` as in step 2, so the next `--build` doesn't
+bring the newer code back. The volume keeps the database. Don't roll back by rebuilding an older
+commit: a rebuild can bring a newer Python and ffmpeg, and for a commit from before the pins
+(2026-10-28), newer libraries too.
 
 ## 4. Deploy the code
 

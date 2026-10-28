@@ -69,7 +69,7 @@ python3 -m venv .venv
 On macOS the first line is `brew install ffmpeg`. On Windows, use WSL2 with Ubuntu and follow the
 same lines inside it; nothing here has been run on Windows itself.
 
-**Checked** on macOS with Python 3.11 and 3.14 (2026-10-01). The production container is Debian
+**Checked** on macOS with Python 3.11 and 3.14 (2026-10-28). The production container is Debian
 with Python 3.14 (`Dockerfile`). If a step fails on Ubuntu or WSL2, fix this page in the same
 pull request.
 

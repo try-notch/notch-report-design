@@ -61,7 +61,7 @@ services:
       NOTCH_METRICS: /data/metrics.jsonl       # one line per model call: kind, model, latency, cost
       NOTCH_DASH_METER_DB: /data/meter.db      # the fleet's usage (notch_dash/usage.py), opened mode=ro
       NOTCH_DASH_HOME: usage                   # `/` is the usage page; this stack's health is at /harness
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}  # spend only (GET /api/v1/key)
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}  # the key's status, expiry and spend (GET /api/v1/key)
       # The v1 harness's sources don't exist here: off, so the page says so.
       NOTCH_DB: ""
       NOTCH_AUDIO_DIR: ""
