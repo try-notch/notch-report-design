@@ -51,7 +51,9 @@ Nothing in this repo holds a real key, token or password. The real values live o
 **OpenRouter:**
 1. *Settings → Privacy*: turn on **"Enable ZDR only"**, and leave prompt logging and "OpenRouter
    Use of Inputs/Outputs" **off**.
-2. Create a key for this server only, with a monthly credit limit, for `OPENROUTER_API_KEY`.
+2. Create a key for this server only, with a monthly credit limit and **no expiry date**, for
+   `OPENROUTER_API_KEY`. A key with an expiry date stops working on that date, and every model
+   call then fails (it happened on 2026-10-28). The dashboard warns 7 days ahead.
 3. Use only models whose providers are on OpenRouter's ZDR list. That is the owner's decision
    (2026-09-26), in place of waiting for written confirmation. Transcription and Jev can't carry
    the per-request ZDR flag, so the server audits each call's provider afterwards and turns that
@@ -226,8 +228,8 @@ the `meter` volume read-only, and publishes 4130 on the host's 127.0.0.1 only. C
 On the VPS the dashboard's Mac sources (the /v1 database, Caddy's log, the tunnel, the phone)
 are switched off in `compose.yaml`, so `/harness` has nothing of its own to show there and the
 usage page does not link to it. `/` is the usage page (DASHBOARD.md › The usage page): the fleet
-from the meter database, with the API's health and OpenRouter's count of the key's spend in its
-Server card.
+from the meter database. Its Server card has the API's health, whether OpenRouter takes the key
+and when the key expires, the requests OpenRouter failed, and the transcription model's providers.
 
 ## 7. Operating it
 
@@ -260,6 +262,11 @@ blocked account gets 403 `account_blocked` on processing and Notch Cloud writes.
 ```bash
 sudo -u notch sqlite3 /var/lib/notch/meter.db "select kind, calls, round(cost_usd, 4) from daily_spend where day = date('now')"
 ```
+
+**Replacing the OpenRouter key** (refused, expiring, or leaked): make the new one as in
+"OpenRouter" above, put it in `~/notch/.env`, then
+`cd ~/notch && sudo docker compose up -d --force-recreate --wait`. That recreates both
+containers; the dashboard reads the key too.
 
 **Zero retention:** chat calls carry `provider: {zdr: true, data_collection: "deny"}`. After
 every transcription and Jev call the server looks up who served it and checks the ZDR endpoint

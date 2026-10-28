@@ -120,19 +120,20 @@ def test_gate_integrity_reports_an_open_gate():
     assert probes.gate_integrity(http(handler), HOST) == {"healthz": 404, "docs": 200, "open": True, "error": None}
 
 
-def test_openrouter_spend_keeps_only_the_numbers():
+def test_openrouter_key_keeps_only_the_numbers():
     data = {"label": "sk-or-v1-abc...xyz", "creator_user_id": "user_2abc", "workspace_id": "ws_9",
             "limit": 50, "limit_remaining": 49.76, "usage": 0.2435, "usage_daily": 0.0444, "usage_weekly": 0.2435,
-            "usage_monthly": 0.2435, "is_free_tier": False}
+            "usage_monthly": 0.2435, "is_free_tier": False, "expires_at": "2026-11-04T17:32:00Z"}
     seen = []
 
     def handler(request):
         seen.append(request)
         return httpx.Response(200, json={"data": data})
 
-    spend = probes.openrouter_spend(http(handler), "sk-or-v1-real")
+    spend = probes.openrouter_key(http(handler), "sk-or-v1-real")
     assert seen[0].headers["Authorization"] == "Bearer sk-or-v1-real"
-    assert spend == {"limit_usd": 50.0, "remaining_usd": 49.76, "today_usd": 0.0444, "week_usd": 0.2435,
+    assert spend == {"accepted": True, "http_status": 200, "error": None, "expires_at": 1793813520.0,
+                     "limit_usd": 50.0, "remaining_usd": 49.76, "today_usd": 0.0444, "week_usd": 0.2435,
                      "month_usd": 0.2435, "total_usd": 0.2435, "free_tier": False}
 
 

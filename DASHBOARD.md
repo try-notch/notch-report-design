@@ -41,10 +41,15 @@ eight characters of its Supabase id.
 It was first drawn against a synthetic fleet. After the first week of real use (2 accounts, 5
 notches) it was rebuilt around what small, real numbers need:
 
-- **Needs a look:** the page's one banner, worded by the server (`attention`). It lists a
-  zero-retention verdict of `miss` or `unknown`, a call past its deadline and still in flight, calls
-  that failed or were turned away in the last 24 hours, spend at 80% of the daily cap, and the API
-  not answering. A quiet page means none of those.
+- **Needs a look:** the page's one banner, worded by the server (`attention`), the critical lines
+  first. It lists a zero-retention verdict of `miss` or `unknown`, a call past its deadline and still
+  in flight, calls that failed or were turned away in the last 24 hours, spend at 80% of the daily
+  cap, and the API not answering. From the dashboard's own checks of OpenRouter it adds the
+  server's key refused (in OpenRouter's words), the key expiring within 7 days, the transcription
+  model with no working provider, and the server's requests to OpenRouter that failed in the last
+  24 hours, named by OpenRouter's answer ("key refused (401)", "rate limited (429)"). The meter
+  can't say why a call failed: it records what the phone was told, and a refused key, an empty
+  balance and an outage are all `model_unavailable`. A quiet page means none of those.
 - **Last 24 hours:** accounts that made a call, notches, spend, and how many calls didn't go
   through. It is 24 hours on the clock, not the UTC day, which is empty every evening in America.
   An account here is one that made a call: `active_days` records a config fetch by day, with no time.
@@ -65,8 +70,13 @@ notches) it was rebuilt around what small, real numbers need:
   retention), then by kind of call.
 - **Server:** whether the API answers `/healthz` (asked every 15 s while the page is open), the
   config in force with its note and prompts, the limits and when the UTC day turns over in the
-  viewer's zone, and OpenRouter's own count of the key's spend. The link to `/harness` shows only
-  where that page has a source of its own; on the VPS it has none.
+  viewer's zone. Then OpenRouter: whether it takes the server's key (or refuses it, in its own
+  words), when the key expires, and its spend; the server's requests to OpenRouter that failed in
+  the last 24 hours, by OpenRouter's answer (from `NOTCH_METRICS`, one line per HTTP attempt, so
+  each retry counts); and the providers of the model the server transcribes with (the config's
+  `models.stt`), each working unless OpenRouter marks it down or under half its requests
+  succeeded in the last 30 minutes. The link to `/harness` shows only where that page has a
+  source of its own; on the VPS it has none.
 - **Speed and cost:** each kind of call by the prompt version that wrote it: calls, failed, the
   typical (median) and slowest time, the mean cost and tokens. A p95 shows from 20 calls.
 - **Recent calls:** the last 30, one row each: when, the call, the account's prefix, its size, how
@@ -83,15 +93,16 @@ bad requests costs one small write, not one each. Rows older than 90 days are dr
 quarter of a cent) and two from a dollar up; zero is "$0". Sums are rounded once, at the end.
 Instants are the viewer's local time; "ago" is measured from the server's clock.
 
-**The document** (`GET /api/usage`) carries `v` (2). The page shows "The dashboard was updated.
+**The document** (`GET /api/usage`) carries `v` (3). The page shows "The dashboard was updated.
 Reload the page." when it meets another version. A meter from before `refusals` existed is read as
 having none.
 
 A read is cached for ten seconds; the page refreshes every fifteen, and stops while its tab is hidden.
 
 **Check it end to end:** `.venv/bin/python e2e/dash_usage.py` serves the API and the dashboard on
-local ports with the fake models, plays the first week of real use and every kind of refusal, and
-checks `/api/usage` and the rendered page (in headless Chrome, under the page's own
+local ports with the fake models, plays the first week of real use and every kind of refusal, then
+OpenRouter refusing the server's key, a key days from its expiry and the transcription model with
+no working provider, and checks `/api/usage` and the rendered page (in headless Chrome, under the page's own
 Content-Security-Policy) against what the phones were answered. It writes `report.html` with
 screenshots to `e2e/runs/`; `--serve` leaves the page up, on that week's numbers, to look at.
 `tests/test_dash_usage_e2e.py` runs its first pass inside the suite.
@@ -113,7 +124,7 @@ screenshots to `e2e/runs/`; `--serve` leaves the page up, on that week's numbers
 | `NOTCH_DASH_TUNNEL_METRICS` | `127.0.0.1:20241` | The cloudflared metrics server (`/ready`, `/metrics`). |
 | `NOTCH_DASH_GATE_SECRET_FILE` | off | A file holding the 48-lowercase-hex gate secret. It turns on the end-to-end probe. |
 | `NOTCH_DASH_DEVICE` | unset (the device panel is off) | The phone's hardware UDID for `devicectl`. |
-| `OPENROUTER_API_KEY` | read from `.env` (loaded when `notch_api.config` is imported) | Used only for `GET /api/v1/key` (spend). |
+| `OPENROUTER_API_KEY` | read from `.env` (loaded when `notch_api.config` is imported) | Used only for `GET /api/v1/key`: whether OpenRouter takes the key, when it expires, and its spend. Without it the dashboard asks OpenRouter nothing, the transcription model's providers included. |
 | `NOTCH_DASH_HOSTS` | none | Extra `Host` values to answer, comma-separated. On the VPS: the machine's tailnet name (`<machine>.<tailnet>.ts.net`), which `tailscale serve` passes through. |
 | `NOTCH_DASH_TAILNET` | off | `1` trusts Tailscale's address ranges (`100.64.0.0/10`, `fd7a:115c:a1e0::/48`) in `X-Forwarded-For`, where `tailscale serve` names the tailnet device it was reached from. Only for a machine where nothing but `tailscale serve` can reach the dashboard (DEPLOY.md). |
 | `NOTCH_DASH_METER_DB` | off | The /v2 server's meter database, opened read-only, for the usage page (`/usage`, and `/` when `NOTCH_DASH_HOME=usage`). |
@@ -145,7 +156,8 @@ A **Poller** is one daemon thread that calls one function on a fixed interval an
 | cloudflared `/ready` + `/metrics` | poller | 5 s | 2 s | 30 s | the last good read |
 | Public end-to-end probe `GET https://<host>/<secret>/healthz` | poller, watched only | 15 s | 10 s | 60 s | the latest result |
 | Gate integrity `GET https://<host>/healthz` and `/docs` (no secret) | poller, watched only | 60 s | 10 s | 5 min | the latest result |
-| OpenRouter `GET /api/v1/key` | poller, watched only | 60 s | 10 s | 10 min | the last good read |
+| OpenRouter `GET /api/v1/key` | poller, watched only | 60 s | 10 s | 10 min | the last answer: a refusal (401, 403) is kept like a good read, so a new key clears it on the next one |
+| OpenRouter `GET /api/v1/models/<models.stt>/endpoints` (no key sent) | poller, while the usage page is watched, with a key set | 60 s | 10 s | 10 min | the last good read |
 | `xcrun devicectl list devices --json-output <tmp>` | poller, watched only | 60 s | 15 s | 10 min | the last good read |
 | Audio dir size (walk) | poller | 60 s | – | 10 min | total bytes and file count |
 | SQLite | per request | each snapshot | `timeout=1` | – | nothing is cached |
@@ -629,6 +641,7 @@ For each check, the backend evaluates the rules top to bottom, and the first mat
 | | otherwise | ok | Fine | "Nothing waiting · {n} done in 24 h." |
 | openrouter | no key in the environment | unknown | Not set up | "Not set up. Add OPENROUTER_API_KEY to .env to see spend." |
 | | no good read in 10 min | unknown | Can’t reach it | "Couldn’t read spend from OpenRouter: {error}." |
+| | OpenRouter refuses the key (401, 403) | critical | Refused | "OpenRouter refuses the key: {OpenRouter's message}" |
 | | a limit is set and `remaining_usd` ≤ 0 | critical | Out | "No credit left. Model calls will be refused until it’s topped up." |
 | | a limit is set and `remaining_usd` < 5 | warn | Low | "${x} left of ${limit}." |
 | | otherwise | ok | Fine | "${today} today · ${month} this month · ${left} left of ${limit}." (the last clause becomes "no limit" when there is none) |
@@ -707,12 +720,12 @@ For each check, the backend evaluates the rules top to bottom, and the first mat
 | `settings.py` | A frozen `Settings` dataclass and `from_env(environ)`. This is the only place that reads the environment. Defaults come from `notch_api.config`. |
 | `live.py` | `Tail`: a file follower that keeps its file open, finishes a rolled file before opening the new one, handles truncation, and holds bounded 24 h deques behind a lock, one per kind of item. `Poller`: a daemon thread with an interval, a watched-only flag and `(value, read_at, error)`. Tests call `.tick()` / `.refresh()` directly, with no threads. |
 | `logs.py` | Pure parsers for Caddy lines (classify passed/blocked/local/dash, normalize routes), server-log lines (httpx calls, error groups, the "resumed" line), tunnel-log lines (URL, WRN/ERR) and metrics lines. Also `redact`. |
-| `probes.py` | Local `/healthz`; cloudflared `/ready` + `/metrics` (a Prometheus regex for only the lines above); the public end-to-end probe and gate integrity; OpenRouter `/key`; devicectl. Every function takes an injected `httpx.Client` or `run`. |
+| `probes.py` | Local `/healthz`; cloudflared `/ready` + `/metrics` (a Prometheus regex for only the lines above); the public end-to-end probe and gate integrity; OpenRouter `/key` and a model's `/endpoints`; devicectl. Every function takes an injected `httpx.Client` or `run`. |
 | `record.py` | Read-only SQLite: `connect_ro(path)` plus the bounded queries (the last 20 rows with audio presence, unfinished jobs by state and the oldest, 1 h/24 h done/failed, record counts, job_id → entry_id for the capture jobs updated in 24 h, the metrics window, ≤ 2000). One connection per snapshot. |
 | `snapshot.py` | `build(src, db, now, started=None) -> dict`: the checks, the status rules and thresholds, overall, the panels, phases and notes. Pure: given the sources' cached values and the DB rows, it returns the contract. Each check is a public function (`server_check`, `tunnel_check`, `gate_check`, `worker_check`, `openrouter_check`, `phone_check`, `overall`) so the rules are tested directly. |
 | `app.py` | `create_app(settings, *, http=None, run=subprocess.run, clock=time.time, start=True)`. It serves `GET /` (index.html), `GET /static/{app.js,style.css}` (an allow-list), `GET /api/snapshot`, the header middleware and the Host check. `Sources` wires every Tail and Poller, answers each `sources.*` entry, and reads the record once per snapshot (snapshots are built one at a time). The lifespan starts and stops the threads. |
 | `static/index.html`, `static/app.js`, `static/style.css` | The page (see below). |
-| `usage.py` | `read(path, now) -> dict`: the usage page's document, from the meter database opened read-only, cached for ten seconds. |
+| `usage.py` | `read(path, now) -> dict`: the usage page's document, from the meter database opened read-only, cached for ten seconds. `upstream_failures` groups the failed requests to OpenRouter by its answer, and `server_attention` words the banner's lines about the server and OpenRouter. |
 | `static/usage.html`, `static/usage.js` | The usage page. It shares `style.css`; its own rules sit under `.usage`, `.mini`, `.list` and `.pair`. |
 
 **Tests:** `tests/test_dash_logs.py` (also `Tail` and `Poller`), `tests/test_dash_probes.py`, `tests/test_dash_snapshot.py`, `tests/test_dash_app.py` and `tests/test_metrics.py`.

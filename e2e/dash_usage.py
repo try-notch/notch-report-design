@@ -15,7 +15,9 @@ tests/test_dash_usage_e2e.py runs the first pass, without the screenshots, as pa
 
 The story mirrors the first week of real use: one person on seven builds in five days, five
 notches, two reports, one rewrite, a second person who only opened the app, a config push that
-turned the writing check on, and then everything that can turn a phone away.
+turned the writing check on, and then everything that can turn a phone away. Last comes Oct 28,
+when OpenRouter refused the server's expired key: told through the real OpenRouterClient, then a
+new key, a key with no expiry, and the transcription model losing its providers.
 
 EVERY WAY THIS CAN GO WRONG, written before the code. Each is a check below, by its number.
 
@@ -69,6 +71,20 @@ EVERY WAY THIS CAN GO WRONG, written before the code. Each is a check below, by 
 
  The container's way of starting
   F34 `python -m notch_api` or `python -m notch_dash` does not start with compose.yaml's environment.
+
+ OpenRouter, as the server meets it (added 2026-10-28, the day the server's key expired and the page
+ said only "model unavailable")
+  F37 OpenRouter refuses the server's key, and the page shows a blank key card and "model unavailable",
+      never the refusal.
+  F38 The key's expiry date is ignored, so a key days from expiring raises nothing.
+  F39 A key with no expiry, or a key check that couldn't reach OpenRouter, reads as a problem with the key.
+  F40 Failed model requests don't say what OpenRouter answered: a refused key (401), no credit (402),
+      rate limiting (429) and an outage (5xx, timeouts) all read "model unavailable".
+  F41 The transcription model having no working provider at OpenRouter goes unmentioned, or a model
+      that works is called down.
+  F42 Words from OpenRouter (an error message, a provider's name) reach the page as markup, or carry a key.
+  F43 A new key that works still shows as refused, because an old reading outlives it.
+  F44 With no key set, the dashboard asks OpenRouter anything.
 """
 
 import argparse
@@ -99,13 +115,13 @@ sys.path.insert(0, HERE)
 import httpx  # noqa: E402
 import uvicorn  # noqa: E402
 
-from notch_api import privacy  # noqa: E402
+from notch_api import metrics, privacy  # noqa: E402
 from notch_api.app import create_app  # noqa: E402
 from notch_api.auth import Verifier  # noqa: E402
 from notch_api.fakes import (  # noqa: E402
     FakeApple, FakeAudio, FakeClient, FakeSupabaseAdmin, _BoundFake, fake_recording)
 from notch_api.meter import Meter  # noqa: E402
-from notch_api.openrouter import ModelUnavailable  # noqa: E402
+from notch_api.openrouter import ModelUnavailable, OpenRouterClient  # noqa: E402
 from notch_api.refusals import RefusalCounter  # noqa: E402
 from notch_api.services import Services  # noqa: E402
 from notch_api.zdr import ZdrAuditor  # noqa: E402
@@ -123,6 +139,11 @@ D = "dddddddd-4444-4444-8444-444444444444"   # one notch, then deleted (part two
 WHISPER, CHAT = "openai/whisper-large-v3", "deepseek/deepseek-v4-pro-0813"
 OPENROUTER_KEY = {"limit": 50, "limit_remaining": 49.5, "usage": 0.5, "usage_daily": 0.01, "usage_weekly": 0.2,
                   "usage_monthly": 0.5, "is_free_tier": False}
+KEY_EXPIRED = {"error": {"message": "API key expired.", "code": 401}}   # OpenRouter's answer on Oct 28
+WHISPER_UP = [{"provider_name": name, "status": 0, "uptime_last_30m": 100.0}   # as OpenRouter lists them on Oct 28
+              for name in ("DeepInfra", "Together", "Groq")]
+OPENROUTER = {"key": (200, {"data": OPENROUTER_KEY}),   # how the dashboard's OpenRouter checks are answered
+              "endpoints": (200, {"data": {"id": WHISPER, "endpoints": WHISPER_UP}})}
 PROJECTS = ["Checkout Rewrite", CANARY.title()]
 
 
@@ -271,6 +292,7 @@ class Stack:
                                        sleep=lambda seconds: None)
         self.api_port, self.dash_port = free_port(), free_port()
         self.api_app = Counted(create_app(services=self.services, v1=False))
+        self.openrouter, self.asked = dict(OPENROUTER), []   # OpenRouter's answers to the dashboard, and its paths
         self.dash_app = self.dashboard(self.dash_port)
         self.settings = self.dash_app.state.sources.settings
         self.api = f"http://127.0.0.1:{self.api_port}"
@@ -279,19 +301,23 @@ class Stack:
         self.ledger, self.keys = [], []
         self._real = httpx.HTTPTransport()
 
-    def dashboard(self, port, start=True):
+    def dashboard(self, port, start=True, key="e2e-not-a-key"):
         """notch_dash for `port`, from compose.yaml's environment; `start=False` leaves its probes asleep."""
         settings = Settings.from_env(compose_dash_environment() | {
             "NOTCH_DASH_BIND": "127.0.0.1", "NOTCH_DASH_PORT": str(port), "NOTCH_PORT": str(self.api_port),
             "NOTCH_DASH_METER_DB": self.meter_db, "NOTCH_METRICS": os.path.join(self.work, "metrics.jsonl"),
-            "OPENROUTER_API_KEY": "e2e-not-a-key"})
+            "OPENROUTER_API_KEY": key})
         return dash_app.create_app(settings, http=httpx.Client(transport=httpx.MockTransport(self._outbound)),
                                    clock=self.clock, start=start)
 
     def _outbound(self, request):
-        """The dashboard's own HTTP: OpenRouter's key endpoint is canned, the API's /healthz is real."""
+        """The dashboard's own HTTP: OpenRouter answers from `self.openrouter`, the API's /healthz is real."""
         if request.url.host == "openrouter.ai":
-            return httpx.Response(200, json={"data": OPENROUTER_KEY})
+            self.asked.append(request.url.path)
+            answer = self.openrouter["key" if request.url.path == "/api/v1/key" else "endpoints"]
+            if isinstance(answer, Exception):
+                raise answer
+            return httpx.Response(answer[0], json=answer[1])
         return self._real.handle_request(request)
 
     # -- one phone call ---------------------------------------------------------
@@ -584,7 +610,7 @@ def run(out, *, browser=None, serve=False, quick=False):
         with Served(s.dashboard(port, start=False), port):
             quiet = f"http://127.0.0.1:{port}"
             empty, _ = s.usage(quiet)
-            check("F27", "an empty meter answers a whole document", empty.get("v") == 2 and empty["recent"] == []
+            check("F27", "an empty meter answers a whole document", empty.get("v") == 3 and empty["recent"] == []
                   and empty["daily"] == [] and empty["week"]["notch_cost_usd"] is None, empty.get("error"))
             if browser:
                 dom, logged = chrome(browser, quiet + "/", width=1280, height=1600, dom=True)
@@ -635,6 +661,10 @@ def run(out, *, browser=None, serve=False, quick=False):
         part_two(check, s, browser, out, shot=not quick)
         healthz = s.api_app.paths.get("/healthz", 0)
         check("F26", "the dashboard asked /healthz a few times, not every two seconds", 1 <= healthz <= 6, healthz)
+
+        # -- part three: OpenRouter refuses the server's key, then Whisper goes down ----
+        print("OpenRouter refuses the server's key, then Whisper goes down")
+        shots += openrouter_trouble(check, s, browser, out, shot=not quick)
 
         if serve:
             print(f"\nThe page is up at {s.dash}/  (Ctrl-C to stop)")
@@ -890,6 +920,147 @@ def part_two(check, s, browser, out, shot=True):
           {"refusals", "usage_by_day"} <= names and events > 40, sorted(names))
 
 
+def openrouter_trouble(check, s, browser, out, shot=True):
+    """
+    Oct 1, 02:00 UTC: the server's OpenRouter key stops working, as it did on Oct 28. One recording goes through the
+    real OpenRouterClient to an OpenRouter that answers 401 "API key expired."; then come a new key that expires in
+    three days, one with no expiry, a key check that can't reach OpenRouter, Whisper with no working provider, and
+    markup in what OpenRouter says. Each scene is read from a dashboard whose probes the run refreshes by hand, so
+    every reading is that scene's. Returns the screenshots it took.
+    """
+    c, port, shots = s.clock, free_port(), []
+    c.now = at(10, 1, 2, 0)
+    app = s.dashboard(port, start=False)
+    sources, url = app.state.sources, f"http://127.0.0.1:{port}"
+    refused, expires = "OpenRouter refuses the server’s key", "The server’s OpenRouter key expires"
+    no_provider, failed = "OpenRouter has no working provider", "to OpenRouter failed in the last 24 hours"
+
+    def read(**answers):
+        """OpenRouter answers the dashboard's checks with `answers` -> (/api/usage, {banner line: level})."""
+        s.openrouter.update(answers)
+        sources.api.refresh()
+        sources.openrouter.refresh()
+        sources.transcription.refresh()
+        sources.metrics.tick()
+        u, _ = s.usage(url)
+        return u, {a["text"]: a["level"] for a in u["attention"]}
+
+    def said(lines, words):
+        """The levels of the banner lines that contain `words`."""
+        return [level for text, level in lines.items() if words in text]
+
+    with Served(app, port):
+        # OpenRouter can't be reached before the first good read: no word against the key, and Whisper is up.
+        u, lines = read(key=httpx.ConnectError("refused"))
+        key, whisper = u["server"]["openrouter"], u["server"]["transcription"]
+        check("F39", "a key check that can't reach OpenRouter says so, and nothing calls the key bad",
+              key["accepted"] is None and key["error"] == "couldn’t connect"
+              and not said(lines, refused) + said(lines, expires), (key, lines))
+        check("F41", "a transcription model with every provider up is up, and the banner is quiet about it",
+              whisper["model"] == WHISPER and whisper["up"] == 3 and not said(lines, no_provider)
+              and f"/api/v1/models/{WHISPER}/endpoints" in s.asked, (whisper, s.asked[-2:]))
+
+        # The key expires. A recording goes through the real client: OpenRouter answers 401, the phone gets 502.
+        heard = []
+
+        def expired(request):
+            heard.append(request.url.path)
+            return httpx.Response(401, json=KEY_EXPIRED)
+
+        # The file the dashboard follows. The client stamps its line with the real time, not the run's clock:
+        # later than the run's "now", so inside its last 24 hours.
+        metrics.path = os.path.join(s.work, "metrics.jsonl")
+        s.services.client = OpenRouterClient("e2e-not-a-key", http=httpx.Client(transport=httpx.MockTransport(expired)))
+        try:
+            phone = s.call("POST", "/v2/transcribe", content=fake_recording("Shipped the form."), expect=502,
+                           headers={"Content-Type": "audio/mp4", "X-Notch-Mode": "daily", "X-Notch-Duration": "2"})
+        finally:
+            metrics.path, s.services.client = None, s.fake
+        u, lines = read(key=(401, KEY_EXPIRED))
+        with open(os.path.join(out, "usage-openrouter.json"), "w", encoding="utf-8") as f:
+            json.dump(u, f, indent=1)
+        key, failures = u["server"]["openrouter"], u["server"]["openrouter_failures"]
+        check("F37", "a refused key is said: OpenRouter's own words on the card, critical in the banner",
+              key["accepted"] is False and key["http_status"] == 401 and key["error"] == "API key expired."
+              and said(lines, f"{refused}: API key expired.") == ["critical"], (key, lines))
+        check("F40", "the failed request is named by what OpenRouter answered; the phone still hears model_unavailable",
+              phone.json()["error"]["code"] == "model_unavailable" and heard == ["/api/v1/audio/transcriptions"]
+              and [(f["status"], f["cause"], f["requests"]) for f in failures] == [(401, "key refused (401)", 1)]
+              and said(lines, f"1 request {failed}: key refused (401) ×1") == ["warn"], (failures, lines))
+        if browser:
+            dom, logged = chrome(browser, url + "/", width=1280, height=2400, dom=True)
+            card = part(dom, "server")
+            check("F37", "the page says it, in the banner and on the server card",
+                  f"{refused}: API key expired." in part(dom, "notice") and "Refused" in card
+                  and "API key expired." in card and "key refused (401) ×1" in card
+                  and not [line for line in logged.splitlines() if "Refused to" in line or "Uncaught" in line],
+                  card[-300:])
+            if shot:
+                for name, dark in (("openrouter-key-expired-light", False), ("openrouter-key-expired-dark", True)):
+                    chrome(browser, url + "/", width=1280, height=3300, shot=os.path.join(out, f"{name}.png"),
+                           dark=dark)
+                    shots.append(f"{name}.png")
+
+        # A new key, made with an expiry three days out: one read clears the refusal and warns of the date.
+        expires_at = c() + 3 * 86400 + 600
+        soon = dt.datetime.fromtimestamp(expires_at, UTC).isoformat().replace("+00:00", "Z")
+        u, lines = read(key=(200, {"data": OPENROUTER_KEY | {"expires_at": soon}}))
+        key = u["server"]["openrouter"]
+        check("F43", "a new key that works is accepted on the first read after it, and the refusal is gone",
+              key["accepted"] is True and key["error"] is None and not said(lines, refused), (key, lines))
+        check("F38", "a key three days from its expiry is a warning that says how long is left",
+              close(key["expires_at"], expires_at) and said(lines, f"{expires} in 3 days") == ["warn"], (key, lines))
+
+        # A key with no expiry; then OpenRouter can't be reached, and the good read stands.
+        u, lines = read(key=(200, {"data": OPENROUTER_KEY | {"expires_at": None}}))
+        forever = u["server"]["openrouter"]
+        u, later = read(key=httpx.ConnectError("refused"))
+        kept = u["server"]["openrouter"]
+        check("F39", "a key with no expiry raises nothing, and a check that then can't reach OpenRouter keeps it",
+              forever["accepted"] is True and forever["expires_at"] is None and not said(lines, expires)
+              and kept["accepted"] is True and not said(later, refused), (forever, kept, later))
+        if browser:
+            card = part(chrome(browser, url + "/", width=1280, height=2400, dom=True)[0], "server")
+            check("F39", "the card says the key has no expiry", "No expiry" in card, card[-300:])
+
+        # Whisper with no working provider, then with one of its three down.
+        down = [p | {"status": -2, "uptime_last_30m": 0.0} for p in WHISPER_UP]
+        u, lines = read(key=OPENROUTER["key"], endpoints=(200, {"data": {"id": WHISPER, "endpoints": down}}))
+        whisper = u["server"]["transcription"]
+        check("F41", "a transcription model with no working provider is critical, and named",
+              whisper["up"] == 0 and len(whisper["providers"]) == 3
+              and said(lines, f"{no_provider} for {WHISPER}") == ["critical"], (whisper, lines))
+        partly = [WHISPER_UP[0] | {"uptime_last_30m": 12.5}, *WHISPER_UP[1:]]
+        u, lines = read(endpoints=(200, {"data": {"id": WHISPER, "endpoints": partly}}))
+        check("F41", "one provider down of three stays on the card: OpenRouter routes around it",
+              u["server"]["transcription"]["up"] == 2 and not said(lines, no_provider),
+              (u["server"]["transcription"], lines))
+
+        # Markup, and a key-shaped string, in what OpenRouter says.
+        sneaky = {"error": {"message": "<b>Key</b> sk-or-v1-e2e-not-a-real-key expired", "code": 401}}
+        named = [WHISPER_UP[0] | {"provider_name": "<i>Groq</i>"}, *WHISPER_UP[1:]]
+        u, lines = read(key=(401, sneaky), endpoints=(200, {"data": {"id": WHISPER, "endpoints": named}}))
+        check("F42", "a key-shaped string from OpenRouter never reaches the document",
+              "sk-or-v1-e2e" not in json.dumps(u) and "<key>" in u["server"]["openrouter"]["error"],
+              u["server"]["openrouter"])
+        if browser:
+            dom, _ = chrome(browser, url + "/", width=1280, height=2400, dom=True)
+            check("F42", "OpenRouter's words are text on the page, never markup",
+                  "&lt;b&gt;Key&lt;/b&gt;" in dom and "<b>Key</b>" not in dom and "&lt;i&gt;Groq&lt;/i&gt;" in dom
+                  and "<i>Groq</i>" not in dom and "sk-or-v1-e2e" not in dom)
+    s.openrouter = dict(OPENROUTER)
+
+    # Without a key: every check the dashboard runs, once, and not one of them asks OpenRouter.
+    asked, keyless = len(s.asked), s.dashboard(free_port(), start=False, key="").state.sources
+    for step, _, _ in keyless.jobs:
+        step()
+    server = keyless.server(c())
+    check("F44", "with no key set, the dashboard asks OpenRouter nothing and shows nothing of it",
+          len(s.asked) == asked and server["openrouter"] is None and server["transcription"] is None,
+          (s.asked[asked:], server))
+    return shots
+
+
 def as_the_container_starts(check, work):
     """`python -m notch_api` and `python -m notch_dash` with compose.yaml's environment, on two free ports."""
     os.makedirs(work, exist_ok=True)
@@ -934,9 +1105,10 @@ def as_the_container_starts(check, work):
             time.sleep(0.5)
         check("F34", "started as the container starts them, the two serve the usage page",
               heard.status_code == 200 and denied.status_code == 401 and page.status_code == 200
-              and "Notch usage" in page.text and u.get("v") == 2 and u["week"]["notches"] == 1
+              and "Notch usage" in page.text and u.get("v") == 3 and u["week"]["notches"] == 1
               and any(p["code"] == "unauthorized" and p["calls"] == 1 for p in u["problems"])
-              and u["server"] == {"api": u["server"]["api"], "openrouter": None, "harness": False}
+              and u["server"] == {"api": u["server"]["api"], "openrouter": None, "transcription": None,
+                                  "openrouter_failures": [], "harness": False}
               and u["server"]["api"]["ok"] is True, {k: u.get(k) for k in ("v", "error", "server", "problems")})
         httpx.post(api + "/v2/analyze", json={"transcript": "x"}, headers=stranger)
         servers[0].send_signal(signal.SIGTERM)
@@ -971,8 +1143,9 @@ img{{max-width:100%;border:1px solid #ddd}}code{{background:#f3f0e8;padding:2px 
 <h1>The usage page, end to end: {verdict}</h1>
 <p>{len(check.rows)} checks, {len(check.failed)} failed, on {dt.datetime.now().strftime('%b %d %Y at %H:%M')}.
 Run it again with <code>.venv/bin/python e2e/dash_usage.py</code>; add <code>--serve</code> to keep the page up.
-The documents the dashboard served are <a href="usage.json">usage.json</a> and
-<a href="usage-part-two.json">usage-part-two.json</a>; the rendered page is <a href="page.html">page.html</a>.</p>
+The documents the dashboard served are <a href="usage.json">usage.json</a>,
+<a href="usage-part-two.json">usage-part-two.json</a> and <a href="usage-openrouter.json">usage-openrouter.json</a>
+(the key refused); the rendered page is <a href="page.html">page.html</a>.</p>
 <table><tr><th>#</th><th>What must hold</th><th></th><th>What it found</th></tr>{rows}</table>{images}""")
 
 

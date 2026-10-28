@@ -270,7 +270,7 @@ const errors = s => [['Server', s.errors?.server, 'server_log', 'Not set up. Set
 
 // ---- Where this comes from
 const SRC = { db: 'Record', audio_dir: 'Audio folder', metrics: 'Model call log', caddy_log: 'Caddy log', server_log: 'Server log',
-  tunnel_log: 'Tunnel log', tunnel_metrics: 'cloudflared metrics', gate_secret: 'Gate secret', openrouter: 'OpenRouter spend', device: 'Phone (devicectl)' };
+  tunnel_log: 'Tunnel log', tunnel_metrics: 'cloudflared metrics', gate_secret: 'Gate secret', openrouter: 'OpenRouter key', device: 'Phone (devicectl)' };
 const SRC_STATE = { ok: ['ok', 'Reading'], off: ['unknown', 'Off'], unreachable: ['warn', 'Can’t reach it'] };
 const sources = s => h('ul', { class: 'card grouped' }, Object.entries(s.sources || {}).map(([key, x]) => {
   const [k, word] = SRC_STATE[x.state] || ['unknown', 'Unknown'];
