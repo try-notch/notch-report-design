@@ -1,7 +1,36 @@
-# What notch_api needs to serve (the VPS installs only this file).
-fastapi>=0.115
-uvicorn>=0.30
-httpx>=0.27
-jsonschema>=4.23
-python-dotenv>=1.0
-pyjwt[crypto]>=2.15
+# Every library the server runs, at exact versions, so a rebuild of the image installs the ones the
+# checks ran on. requirements.txt includes this file, so development runs the same versions.
+#
+# To upgrade: in a fresh Python 3.14 venv, `pip install --upgrade` the six needs below, run the
+# checks in CONTRIBUTING.md, and copy the versions `pip freeze` prints back into this file.
+
+# What notch_api needs:
+fastapi==0.162.0
+httpx==0.28.1
+jsonschema==4.26.0
+pyjwt[crypto]==2.15.1
+python-dotenv==1.2.4
+uvicorn==0.54.0
+
+# What those pull in:
+annotated-doc==0.0.5
+annotated-types==0.8.0
+anyio==4.15.1
+attrs==26.1.0
+certifi==2026.10.23
+cffi==2.1.1
+click==8.5.0
+cryptography==50.0.2
+h11==0.16.0
+httpcore==1.0.9
+idna==3.20
+jsonschema-specifications==2025.9.1
+opentelemetry-api==1.45.1
+pycparser==3.12
+pydantic==2.14.1
+pydantic_core==2.50.1
+referencing==0.37.0
+rpds-py==2026.9.1
+starlette==1.10.0
+typing-inspection==0.4.4
+typing_extensions==4.16.0

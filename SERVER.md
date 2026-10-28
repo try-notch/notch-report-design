@@ -26,8 +26,9 @@ echo 'OPENROUTER_API_KEY=<your key>' > .env       # one key for every model call
 NOTCH_DEV_AUTH=1 .venv/bin/python -m notch_api    # http://api.notch.localhost (127.0.0.1:4131)
 ```
 
-`requirements-server.txt` is what the server needs (and all the VPS installs);
-`requirements.txt` adds the demo CLI, the `/v1` harness's multipart parser and pytest.
+`requirements-server.txt` pins every library the server runs and is all the image installs (its
+top says how to upgrade them); `requirements.txt` adds the demo CLI, the `/v1` harness's
+multipart parser and pytest.
 
 - **`/v1`** needs `Authorization: Bearer dev`, the one development user.
 - **`/v2`** verifies Supabase access tokens when `SUPABASE_URL` is set, and accepts
