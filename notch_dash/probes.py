@@ -1,9 +1,9 @@
 """
 probes.py — one function per thing notch_dash asks: the local server, cloudflared, the
-public tunnel and the gate, OpenRouter's spend, devicectl and the audio dir. Each takes its
-HTTP client or `run` injected, returns a plain dict of only the fields the page shows, and
-words its own failures (Unreadable): a probe URL can hold the gate secret, so an
-exception's text never leaves this module.
+public tunnel and the gate, OpenRouter's key and a model's providers, devicectl and the
+audio dir. Each takes its HTTP client or `run` injected, returns a plain dict of only the
+fields the page shows, and words its own failures (Unreadable): a probe URL can hold the
+gate secret, so an exception's text never leaves this module.
 """
 
 import json
@@ -12,6 +12,7 @@ import re
 import subprocess
 import tempfile
 import time
+from datetime import datetime, timezone
 
 import httpx
 
@@ -21,6 +22,8 @@ from .logs import OWN_UA, QUICK_HOST, redact
 UA = {"User-Agent": OWN_UA}
 SECRET = re.compile(r"[0-9a-f]{48}")
 APPLE_EPOCH = 978307200  # 2001-01-01 in Unix seconds; devicectl counts from there
+SPEND = ("limit_usd", "remaining_usd", "today_usd", "week_usd", "month_usd", "total_usd", "free_tier")
+WORKING_UPTIME = 50  # % of a provider's requests that must succeed for it to count as working
 
 
 def _get(http, url, timeout, headers=UA):
@@ -142,18 +145,67 @@ def _usd(value):
     return float(value) if type(value) in (int, float) else None
 
 
-def openrouter_spend(http, key):
-    """GET openrouter.ai/api/v1/key -> spend and limit only; never the key's label or ids."""
+def _instant(value):
+    """An ISO 8601 time from OpenRouter -> Unix seconds, or None."""
+    try:
+        at = datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
+    return (at if at.tzinfo else at.replace(tzinfo=timezone.utc)).timestamp()
+
+
+def _data(response):
+    """A JSON answer's `data` object, or None."""
+    body = _json(response)
+    return body.get("data") if isinstance(body, dict) and isinstance(body.get("data"), dict) else None
+
+
+def openrouter_key(http, key):
+    """
+    GET openrouter.ai/api/v1/key -> whether OpenRouter takes the key, when it expires, and its spend;
+    never the key's label or ids. A refusal (401, 403) is an answer, worded in OpenRouter's own
+    message with anything key-shaped hidden; any other failure is Unreadable.
+    """
     response, _ = _get(http, "https://openrouter.ai/api/v1/key", 10, UA | {"Authorization": f"Bearer {key}"})
-    if response.status_code != 200:
-        raise Unreadable(f"HTTP {response.status_code}")
-    data = (_json(response) or {}).get("data")
-    if not isinstance(data, dict):
+    status = response.status_code
+    if status in (401, 403):
+        body = _json(response)
+        error = body.get("error") if isinstance(body, dict) else None
+        message = error.get("message") if isinstance(error, dict) else None
+        words = redact(" ".join(message.split()), 200) if isinstance(message, str) and message.strip() else None
+        return dict.fromkeys(SPEND) | {"accepted": False, "http_status": status, "error": words or f"HTTP {status}",
+                                       "expires_at": None}
+    if status != 200:
+        raise Unreadable(f"HTTP {status}")
+    data = _data(response)
+    if data is None:
         raise Unreadable("unexpected answer")
-    return {"limit_usd": _usd(data.get("limit")), "remaining_usd": _usd(data.get("limit_remaining")),
+    return {"accepted": True, "http_status": status, "error": None, "expires_at": _instant(data.get("expires_at")),
+            "limit_usd": _usd(data.get("limit")), "remaining_usd": _usd(data.get("limit_remaining")),
             "today_usd": _usd(data.get("usage_daily")), "week_usd": _usd(data.get("usage_weekly")),
             "month_usd": _usd(data.get("usage_monthly")), "total_usd": _usd(data.get("usage")),
             "free_tier": data.get("is_free_tier") is True}
+
+
+def model_endpoints(http, model):
+    """
+    GET openrouter.ai/api/v1/models/<model>/endpoints, which needs no key -> the providers that
+    serve `model` and how many of them work. One works unless OpenRouter marks it down (a negative
+    status) or under WORKING_UPTIME % of its requests succeeded in the last 30 minutes.
+    """
+    response, _ = _get(http, f"https://openrouter.ai/api/v1/models/{model}/endpoints", 10)
+    if response.status_code != 200:
+        raise Unreadable(f"HTTP {response.status_code}")
+    endpoints = (_data(response) or {}).get("endpoints")
+    if not isinstance(endpoints, list):
+        raise Unreadable("unexpected answer")
+    providers = []
+    for found in endpoints:
+        if isinstance(found, dict):
+            status, uptime = found.get("status"), _usd(found.get("uptime_last_30m"))
+            up = not (type(status) is int and status < 0) and (uptime is None or uptime >= WORKING_UPTIME)
+            providers.append({"name": _str(found.get("provider_name")) or "?", "up": up, "uptime_30m": uptime})
+    return {"model": model, "providers": providers, "up": sum(p["up"] for p in providers)}
 
 
 def device(run, udid):

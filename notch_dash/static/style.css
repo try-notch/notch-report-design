@@ -253,7 +253,7 @@ pre{max-height:20em;overflow:auto;margin:0 0 var(--row-pad-y) 18px;padding:var(-
 .usage main{padding-top:var(--sp-6);padding-bottom:var(--sp-16)}  /* .wrap's padding shorthand outranks main's */
 .usage .tbl .z{color:var(--ink-700)}
 .usage .tbl td .g{margin-right:2px}
-.usage .card>h3.eyebrow{margin-top:var(--sp-4)}
+.usage .card>h3.eyebrow,.usage .card>.card-head:not(:first-child){margin-top:var(--sp-4)}
 .usage .card-head>.eyebrow{align-self:center}
 .mini{width:100%;border-collapse:collapse;font-size:13px;line-height:18px}
 .mini th{padding:0 var(--sp-2) 6px 0;text-align:left;font-weight:400;letter-spacing:.6px;text-transform:uppercase;color:var(--ink-700)}

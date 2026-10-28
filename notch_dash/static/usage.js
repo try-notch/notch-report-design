@@ -4,7 +4,7 @@
 // constant attributes. Never innerHTML. The DOM helpers are app.js's: fresh nodes morphed into
 // the page, so a poll does not drop a selection or restart an animation.
 
-const V = 2, REFRESH_MS = 15000, NS = 'http://www.w3.org/2000/svg';
+const V = 3, REFRESH_MS = 15000, NS = 'http://www.w3.org/2000/svg';
 const $ = id => document.getElementById(id);
 let U = null, G = 0, lastAt = 0, fails = 0, timer = 0, inflight = false, dead = false, unread = null;
 
@@ -187,11 +187,14 @@ function zdr(u) {
     fact('Recordings are audited after each transcription. Write-ups, rewrites and reports are sent with zero retention required, so OpenRouter can’t route them anywhere else.')];
 }
 
-// ---- Server: is it up, what config it runs, the limits, and OpenRouter's own count of the spend
+// ---- Server: is it up, what config it runs, the limits, and OpenRouter: does it take the key, what it answered
+// the requests that failed, and who can transcribe. OpenRouter's words reach the DOM as text only.
 function server(u) {
-  const s = u.server || {}, c = u.config, lim = u.limits, api = s.api, key = s.openrouter;
+  const s = u.server || {}, c = u.config, lim = u.limits, api = s.api, key = s.openrouter, stt = s.transcription;
+  const failed = s.openrouter_failures || [];
   const label = text => h('h3', { class: 'eyebrow' }, text);
-  return [h('div', { class: 'card-head' }, label('API'), !api ? pill('unknown', 'Not checked yet') : api.ok ? pill('ok', 'Answering') : pill('critical', 'Down')),
+  const head = (text, state) => h('div', { class: 'card-head' }, label(text), state);
+  return [head('API', !api ? pill('unknown', 'Not checked yet') : api.ok ? pill('ok', 'Answering') : pill('critical', 'Down')),
     api && h('p', { class: 'fact mono' }, api.ok ? dot(`/healthz in ${secs(api.latency_ms / 1e3)}`, `checked ${ago(G - api.checked_at)} ago`) : api.error),
     label(`Config v${n(c.version)}`),
     fact(dot(c.note, c.created_by && `by ${c.created_by}`, c.created_at != null && when(c.created_at)) || 'The defaults: nothing has been pushed.'),
@@ -199,8 +202,18 @@ function server(u) {
     label('Limits'),
     fact(dot(`${n(lim.notches_per_day)} notches a day each`, `${cap(lim.account_usd_per_day)} a day an account`, `${cap(lim.global_usd_per_day)} a day overall`)),
     fact(`Days are UTC: the next one starts at ${hm(u.resets_at)} here. ${lim.accounts_at_cap_today ? `${count(lim.accounts_at_cap_today, 'account is', 'accounts are')} at the notch cap today.` : 'No account is at the notch cap today.'}`),
-    key && [label('OpenRouter key'), fact(dot(key.week_usd != null && `${usd(key.week_usd)} this week`, key.total_usd != null && `${usd(key.total_usd)} in all`,
-      key.remaining_usd != null && key.limit_usd != null && `${usd(key.remaining_usd)} of ${cap(key.limit_usd)} left`) || 'No spend reported.')]];
+    key && [head('OpenRouter key', key.accepted ? pill('ok', 'Accepted') : key.accepted === false ? pill('critical', 'Refused')
+        : pill('unknown', key.error ? 'Can’t reach it' : 'Not checked yet')),
+      key.accepted === false && fact(dot(key.error, `HTTP ${key.http_status}`)),
+      key.accepted == null && key.error && fact(`Couldn’t ask OpenRouter: ${key.error}.`),
+      key.accepted && fact(dot(key.expires_at == null ? 'No expiry' : `Expires ${when(key.expires_at)}`,
+        key.week_usd != null && `${usd(key.week_usd)} this week`, key.total_usd != null && `${usd(key.total_usd)} in all`,
+        key.remaining_usd != null && key.limit_usd != null && `${usd(key.remaining_usd)} of ${cap(key.limit_usd)} left`))],
+    failed.length > 0 && [label('Requests to OpenRouter'), fact(`${n(failed.reduce((all, f) => all + f.requests, 0))} failed in the last 24 hours: `,
+      failed.map(f => `${f.cause} ×${n(f.requests)}`).join(', '), '.')],
+    stt && [head('Transcription', stt.up ? pill('ok', `${n(stt.up)} of ${count(stt.providers.length, 'provider')} up`) : pill('critical', 'No working provider')),
+      h('p', { class: 'fact mono' }, stt.model),
+      stt.providers.length > 0 && fact(dot(...stt.providers.map(p => p.up ? p.name : `${p.name} (down)`)))]];
 }
 
 // ---- Speed and cost: each kind of call, by the prompt that wrote it

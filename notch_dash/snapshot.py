@@ -209,7 +209,7 @@ def worker_check(db, *, where, now):
 
 
 def openrouter_check(spend, *, key_set, read_at=None, error=None):
-    """`spend`: the last good /key read while it is under 10 min old, else None."""
+    """`spend`: OpenRouter's last answer about the key (probes.openrouter_key) while under 10 min old, else None."""
     fields = {k: spend and spend[k] for k in ("limit_usd", "remaining_usd", "today_usd", "week_usd", "month_usd",
                                               "total_usd", "free_tier")} | {"read_at": _r3(read_at) if spend else None}
     if not key_set:
@@ -217,6 +217,8 @@ def openrouter_check(spend, *, key_set, read_at=None, error=None):
     if spend is None:
         why = error or ("not read yet" if read_at is None else "not read in the last 10 min")
         return _check("unknown", "Can’t reach it", f"Couldn’t read spend from OpenRouter: {why}.", **fields)
+    if spend["accepted"] is False:
+        return _check("critical", "Refused", f"OpenRouter refuses the key: {spend['error']}", **fields)
     limit, left = spend["limit_usd"], spend["remaining_usd"]
     capped = limit is not None and left is not None
     if capped and left <= 0:

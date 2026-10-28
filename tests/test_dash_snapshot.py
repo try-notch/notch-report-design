@@ -389,18 +389,21 @@ def test_gate_rules(integrity, host, leaked, status):
     assert snapshot.gate_check(integrity, host=host, reqs=reqs, now=NOW)["status"] == status
 
 
-SPEND = {"limit_usd": 50.0, "remaining_usd": 49.76, "today_usd": 0.04, "week_usd": 0.2, "month_usd": 0.2,
-         "total_usd": 0.24, "free_tier": False}
+SPEND = {"accepted": True, "http_status": 200, "error": None, "expires_at": None, "limit_usd": 50.0,
+         "remaining_usd": 49.76, "today_usd": 0.04, "week_usd": 0.2, "month_usd": 0.2, "total_usd": 0.24,
+         "free_tier": False}
+REFUSED = dict.fromkeys(SPEND) | {"accepted": False, "http_status": 401, "error": "API key expired."}
 
 
 @pytest.mark.parametrize("spend, key_set, status", [
     (None, False, "unknown"),
     (None, True, "unknown"),
+    (REFUSED, True, "critical"),
     (SPEND | {"remaining_usd": 0.0}, True, "critical"),
     (SPEND | {"remaining_usd": 4.99}, True, "warn"),
     (SPEND | {"limit_usd": None, "remaining_usd": None}, True, "ok"),
     (SPEND, True, "ok"),
-], ids=["no-key", "no-read", "out", "low", "no-limit", "fine"])
+], ids=["no-key", "no-read", "refused", "out", "low", "no-limit", "fine"])
 def test_openrouter_rules(spend, key_set, status):
     assert snapshot.openrouter_check(spend, key_set=key_set, read_at=NOW, error="HTTP 401")["status"] == status
 

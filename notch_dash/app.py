@@ -7,8 +7,10 @@ sources are kept current by background threads (Sources.start); a snapshot reque
 their caches and runs one bounded read of the record.
 
 The usage page (`/usage`, `api/usage`) is usage.py's read of the meter plus Sources.server():
-whether the API answers, and OpenRouter's own count of the spend. Each page keeps only its own
-probes awake, so the usage page left open asks /healthz every 15 seconds, not every 2.
+whether the API answers, whether OpenRouter takes the server's key and when it expires, whether
+the transcription model has a provider that works, and what OpenRouter answered the server's
+model requests that failed. Each page keeps only its own probes awake, so the usage page left
+open asks /healthz every 15 seconds, not every 2.
 """
 
 import ipaddress
@@ -24,6 +26,8 @@ from contextlib import asynccontextmanager
 import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+
+from notch_api import remote_config
 
 from . import logs, probes, record, snapshot, usage
 from .live import Poller, Tail, run
@@ -44,6 +48,9 @@ ENV = {"db": "NOTCH_DB", "audio_dir": "NOTCH_AUDIO_DIR", "metrics": "NOTCH_METRI
        "caddy_log": "NOTCH_DASH_CADDY_LOG", "server_log": "NOTCH_DASH_SERVER_LOG", "tunnel_log": "NOTCH_DASH_TUNNEL_LOG",
        "tunnel_metrics": "NOTCH_DASH_TUNNEL_METRICS", "gate_secret": "NOTCH_DASH_GATE_SECRET_FILE",
        "openrouter": "OPENROUTER_API_KEY", "device": "NOTCH_DASH_DEVICE"}  # what turns each source on
+# What the usage page shows of OpenRouter's answer about the key.
+KEY = ("accepted", "http_status", "error", "expires_at", "today_usd", "week_usd", "total_usd", "limit_usd",
+       "remaining_usd")
 
 
 class Sources:
@@ -69,7 +76,10 @@ class Sources:
         self.cloudflared = poll(lambda: probes.cloudflared(http, s.tunnel_metrics), 5, 30)
         self.e2e = poll(lambda: probes.end_to_end(http, self.host(clock()), s.gate_secret_file), 15, 60, True)
         self.integrity = poll(lambda: probes.gate_integrity(http, self.host(clock())), 60, 300, True)
-        self.openrouter = poll(lambda: probes.openrouter_spend(http, s.openrouter_key), 60, 600, True)
+        self.openrouter = poll(lambda: probes.openrouter_key(http, s.openrouter_key), 60, 600, True)
+        # The model the server transcribes with: the config's, as the last usage read found it.
+        self.stt_model = remote_config.DEFAULTS["models"]["stt"]
+        self.transcription = poll(lambda: probes.model_endpoints(http, self.stt_model), 60, 600, True)
         self.device = poll(lambda: probes.device(run, s.device), 60, 600, True)
         self.audio = poll(lambda: probes.audio_size(s.audio_dir), 60, 600)
         name = _basename
@@ -86,7 +96,8 @@ class Sources:
         }
         # (step, interval, who must be watching, or None for always): the local server, every configured
         # source, the gate, which needs the host the tunnel sources give, and last the usage page's own
-        # health check. OpenRouter's spend is on both pages, so either keeps it awake.
+        # checks. OpenRouter's key is on both pages, so either keeps it awake. Without a key the
+        # dashboard asks OpenRouter nothing, the transcription model's providers included.
         self.jobs = [(self.health.refresh, self.health.interval, self.watching)]
         for key, (source, configured, _) in self.named.items():
             if isinstance(source, Tail) and configured:
@@ -97,6 +108,8 @@ class Sources:
         self.jobs.append((self.integrity.refresh, self.integrity.interval, self.watching))
         if s.meter_db:
             self.jobs.append((self.api.refresh, self.api.interval, self.usage_watching))
+        if s.meter_db and s.openrouter_key:
+            self.jobs.append((self.transcription.refresh, self.transcription.interval, self.usage_watching))
         self._stop, self._building = threading.Event(), threading.Lock()
 
     def watching(self):
@@ -156,19 +169,29 @@ class Sources:
 
     def server(self, now):
         """
-        The usage page's view of this stack, and the mark that someone is watching it:
-        `api` (does /healthz answer; None until the first check), `openrouter` (the key's
-        own spend, None without a key or before the first read) and `harness` (whether
-        /harness has anything of its own to show here).
+        The usage page's view of this stack, and the mark that someone is watching it (DASHBOARD.md
+        › The usage page): `api` (does /healthz answer; None until the first check), `openrouter`
+        (whether OpenRouter takes the server's key, when the key expires, and its spend; None
+        without a key), `transcription` (the providers of the model the server transcribes with;
+        None without a key or before the first read), `openrouter_failures` (the server's model
+        requests that failed in the last 24 hours, by what OpenRouter answered) and `harness`
+        (whether /harness has anything of its own to show here).
         """
         self.usage_watched_at, s = now, self.settings
-        health, spend = self.api.current(now), self.openrouter.current(now) if s.openrouter_key else None
+        health = self.api.current(now)
+        stt = self.transcription.current(now) if s.openrouter_key else None
+        if not s.openrouter_key:
+            key = None
+        elif (read := self.openrouter.current(now)) is not None:
+            key = {k: read[k] for k in KEY} | {"checked_at": snapshot._r3(self.openrouter.read_at)}
+        else:  # no answer from OpenRouter in the last 10 minutes: nothing is known but why
+            key = dict.fromkeys(KEY) | {"error": self.openrouter.error, "checked_at": None}
         return {
             "api": health and {"ok": health["error"] is None, "latency_ms": health["latency_ms"],
                                "error": health["error"], "checked_at": snapshot._r3(self.api.read_at)},
-            "openrouter": spend and {k: spend[k] for k in ("today_usd", "week_usd", "total_usd", "limit_usd",
-                                                             "remaining_usd")} | {
-                "checked_at": snapshot._r3(self.openrouter.read_at)},
+            "openrouter": key,
+            "transcription": stt and stt | {"checked_at": snapshot._r3(self.transcription.read_at)},
+            "openrouter_failures": usage.upstream_failures(self.metrics.items(), now),
             "harness": bool(s.db or s.caddy_log or s.server_log or s.tunnel_log),
         }
 
@@ -249,10 +272,11 @@ def create_app(settings, *, http=None, run=subprocess.run, clock=time.time, star
         document = usage.read(settings.meter_db, now)
         if "error" in document:
             return JSONResponse(document)
+        sources.stt_model = document["config"]["models"]["stt"]
         server = sources.server(now)
-        down = [] if not server["api"] or server["api"]["ok"] else [
-            {"level": "critical", "text": f"The API isn’t answering on this server: {server['api']['error']}."}]
-        return JSONResponse(document | {"server": server, "attention": down + document["attention"]})
+        attention = usage.server_attention(server, now) + document["attention"]
+        attention.sort(key=lambda line: line["level"] != "critical")  # stable: the critical ones first
+        return JSONResponse(document | {"server": server, "attention": attention})
 
     @app.api_route("/static/{name}", methods=["GET", "HEAD"])
     def static(name: str):

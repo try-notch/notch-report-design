@@ -112,9 +112,9 @@ comes back `audio_unreadable`. DEPLOY.md › 3b runs the same server as the cont
 
 | Command | Needs | Takes | What it proves |
 |---|---|---|---|
-| `.venv/bin/python -m pytest -q` | ffmpeg | under a minute | The offline suite: 730 passed on 2026-10-01. |
+| `.venv/bin/python -m pytest -q` | ffmpeg | under a minute | The offline suite: 731 passed on 2026-10-28. |
 | `.venv/bin/python e2e/run_e2e.py --offline` | ffmpeg | seconds | The `/v1` harness end to end on fakes, 147 checks. The run is kept under `e2e/runs/<stamp>/`. |
-| `.venv/bin/python e2e/dash_usage.py` | a Chrome or Chromium binary (`CHROME=/path/to/it`) | ~20 s | `/v2`, the meter and the usage page on fakes, 49 checks. It writes `e2e/runs/dash-usage-<stamp>/report.html`. The suite runs the same pass without the browser. |
+| `.venv/bin/python e2e/dash_usage.py` | a Chrome or Chromium binary (`CHROME=/path/to/it`) | ~20 s | `/v2`, the meter and the usage page on fakes, 63 checks. It writes `e2e/runs/dash-usage-<stamp>/report.html`. The suite runs the same pass without the browser. |
 | `.venv/bin/python e2e/check_route.py` | `OPENROUTER_API_KEY` | ~30 s, ~$0.01 | The writing check through `/v2` on real models. |
 | `.venv/bin/python e2e/run_e2e.py` | `OPENROUTER_API_KEY` | ~2.5 min, ~$0.06 | The `/v1` harness on real models. |
 

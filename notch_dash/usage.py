@@ -28,6 +28,13 @@ with a method its path does not take, is a probe: one count, never a row. A 404 
 route is neither: it is that route's answer (Notch Cloud's keycheck says it until a key is
 set up). A meter from before `refusals` existed reads as having none.
 
+WHY A MODEL CALL FAILED IS NOT IN THE METER. It records what the phone was told: a key
+OpenRouter refuses, an empty balance and an outage are all `model_unavailable`. So the server
+card and its banner lines (server_attention) come from the dashboard's own checks
+(app.Sources.server): whether OpenRouter takes the server's key and when the key expires, whether
+the transcription model has a provider that works, and what OpenRouter answered each request
+that failed (notch_api/metrics.py's file, one line per HTTP attempt).
+
 Every query is bounded to the last few weeks or counts rows by an indexed column, and a read
 is cached for CACHE_S seconds, so a page left open costs the server one small read every few
 seconds.
@@ -42,7 +49,7 @@ from datetime import datetime, timedelta, timezone
 
 from notch_api import remote_config
 
-V = 2              # the document's version: the page reloads when it changes
+V = 3              # the document's version: the page reloads when it changes
 DAYS = 14          # how far back the day table looks
 WINDOW_DAYS = 7    # timings, problems, models, versions, accounts
 CACHE_S = 10
@@ -55,6 +62,10 @@ DAY, HOUR = 86400, 3600
 KINDS = {"transcribe": "notches", "analyze": "analyses", "takeaways": "rewrites", "reports": "reports"}
 NO_ROUTE = "unmatched"   # refusals.py's route for a request the router matched to nothing
 AUDITED = {"transcribe": ("recording", "transcribed"), "analyze": ("write-up", "classified")}
+KEY_WARN_DAYS = 7  # the banner warns this long before the server's OpenRouter key expires
+CAUSES = {400: "bad request", 401: "key refused", 402: "out of credit", 403: "input flagged",
+          404: "no provider to route to", 408: "timed out", 429: "rate limited", 502: "provider down",
+          503: "no provider available"}  # OpenRouter's own error codes, in a few words
 
 _cache = {}
 _lock = threading.Lock()
@@ -446,4 +457,65 @@ def _attention(verdicts, in_flight, failed_codes, turned_codes, spend_today, spe
         n = sum(turned_codes.values())
         warn.append(f"{_count(n, 'call')} {'was' if n == 1 else 'were'} turned away before processing in the last "
                     f"24 hours: {codes(turned_codes)}.")
+    return [{"level": "critical", "text": t} for t in critical] + [{"level": "warn", "text": t} for t in warn]
+
+
+def _sentence(text):
+    return text if text.endswith((".", "!", "?")) else text + "."
+
+
+def _left(seconds):
+    """How long until something, rounded down: '3 days', '5 hours', 'less than an hour'."""
+    if seconds >= DAY:
+        return _count(int(seconds // DAY), "day")
+    return _count(int(seconds // HOUR), "hour") if seconds >= HOUR else "less than an hour"
+
+
+def _cause(status):
+    """What OpenRouter's answer to one failed request means: '401' -> 'key refused (401)'."""
+    if status == "timeout":
+        return "timed out"
+    if type(status) is not int:
+        return "couldn’t connect"
+    if status < 400:
+        return f"error in the answer ({status})"
+    return f"{CAUSES.get(status, 'server error' if status >= 500 else 'refused')} ({status})"
+
+
+def upstream_failures(calls, now):
+    """
+    The server's requests to OpenRouter (logs.Call, one per HTTP attempt) that failed in the last
+    24 hours, grouped by what OpenRouter answered, the most first:
+    [{status, cause, requests, last_at}].
+    """
+    groups = {}
+    for call in calls:
+        if call.ok or call.at < now - DAY:
+            continue
+        group = groups.setdefault(call.status, {"status": call.status, "cause": _cause(call.status), "requests": 0,
+                                                "last_at": call.at})
+        group["requests"] += 1
+        group["last_at"] = max(group["last_at"], call.at)
+    return sorted(groups.values(), key=lambda g: (-g["requests"], -g["last_at"]))
+
+
+def server_attention(server, now):
+    """The banner's lines about this server and OpenRouter, from app.Sources.server(), worded as _attention's."""
+    api, key, stt, failed = server["api"], server["openrouter"], server["transcription"], server["openrouter_failures"]
+    critical, warn = [], []
+    if api and not api["ok"]:
+        critical.append(f"The API isn’t answering on this server: {api['error']}.")
+    if key and key["accepted"] is False:
+        critical.append(f"OpenRouter refuses the server’s key: {_sentence(key['error'])} Every model call fails "
+                        "until it’s replaced.")
+    elif key and key["expires_at"] is not None and key["expires_at"] - now < KEY_WARN_DAYS * DAY:
+        warn.append(f"The server’s OpenRouter key expires in {_left(key['expires_at'] - now)}. Every model call "
+                    "fails after that.")
+    if stt and not stt["up"]:
+        critical.append(f"OpenRouter has no working provider for {stt['model']}, so recordings can’t be transcribed.")
+    if failed:
+        named = ", ".join(f"{f['cause']} ×{f['requests']:,}" for f in failed[:6])
+        more = f" and {_count(len(failed) - 6, 'other answer')}" if len(failed) > 6 else ""
+        warn.append(f"{_count(sum(f['requests'] for f in failed), 'request')} to OpenRouter failed in the last 24 "
+                    f"hours: {named}{more}.")
     return [{"level": "critical", "text": t} for t in critical] + [{"level": "warn", "text": t} for t in warn]
